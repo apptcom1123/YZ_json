@@ -1,0 +1,51 @@
+{
+  "xiang": {
+    "name": "象",
+    "author": "孔子",
+    "dynasty": "春秋",
+    "type": "yi",
+    "description": ""
+  },
+  "tuan": {
+    "name": "彖",
+    "author": "孔子",
+    "dynasty": "春秋",
+    "type": "yi",
+    "description": ""
+  },
+  "wen": {
+    "name": "文言",
+    "author": "孔子",
+    "dynasty": "春秋",
+    "type": "yi",
+    "description": ""
+  },
+  "xu": {
+    "name": "序卦",
+    "author": "孔子",
+    "dynasty": "春秋",
+    "type": "yi",
+    "description": ""
+  },
+  "za": {
+    "name": "雜卦",
+    "author": "孔子",
+    "dynasty": "春秋",
+    "type": "yi",
+    "description": ""
+  },
+  "shuo": {
+    "name": "說卦",
+    "author": "孔子",
+    "dynasty": "春秋",
+    "type": "yi",
+    "description": ""
+  },
+  "ji": {
+    "name": "繫辭",
+    "author": "孔子",
+    "dynasty": "春秋",
+    "type": "yi",
+    "description": ""
+  }
+}
