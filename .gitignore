@@ -2,4 +2,9 @@
 dist/
 .vercel/
 
+# Local-only server and browser smoke tests
+/server.js
+/tests/
+*.log
+
 .vercel

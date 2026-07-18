@@ -2,6 +2,8 @@
 
 本倉庫整理《周易》本文、部分《易傳》資料，以及對應的 Markdown 與圖片資源，方便查閱、二次處理與程式使用。
 
+另架設一簡單前端網站供使用者查看 : https://iching-reader-seven.vercel.app/
+
 部分資料來自：
 
 - https://github.com/john-walks-slow/open-iching
