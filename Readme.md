@@ -5,9 +5,12 @@
 部分資料來自：
 
 - https://github.com/john-walks-slow/open-iching
-- 國易堂
+- 國易堂 (網站已失效)
 
 如有錯漏，歡迎修正。
+
+## Update
+2026.07.11: This repo is created.
 
 ## 1. 項目結構
 
@@ -34,12 +37,12 @@
 │  ├─ 序卦.md
 │  ├─ 說卦.md
 │  ├─ 系辭.md
-│  ├─ 雜掛.md
+│  ├─ 雜卦.md
 │  └─ 占卜流程.md
 ├─ image/
+├─ .gitignore
 ├─ process.ipynb
-├─ package.json
-└─ package-lock.json
+└─ Readme.md
 ```
 
 ## 2. 內容說明
@@ -101,7 +104,9 @@
         "id": 1,
         "type": 1,
         "name": "初九",
-        "scripture": "潛龍，勿用。"
+        "scripture": "潛龍，勿用。",
+        "image": "",
+        "poetry": ""
       }
     ],
     "image": "",
@@ -125,6 +130,8 @@
 | `lines[].type` | 爻性，`1` 為陽爻，`0` 為陰爻 |
 | `lines[].name` | 爻名 |
 | `lines[].scripture` | 爻辭 |
+| `lines[].image` | 圖像位址 |
+| `lines[].poetry` | 詩詞內容 |
 | `image` | 預留圖片欄位 |
 | `poetry` | 預留附加文本欄位 |
 
@@ -191,14 +198,6 @@
 ## 使用方式
 
 若只需查閱內容，直接打開 `md/` 或 JSON 檔即可。
-
-若需使用本倉庫的 Node.js 環境：
-
-```bash
-npm install
-```
-
-目前 `package.json` 主要提供資料處理相關開發依賴，未定義執行腳本。
 
 ## 版權聲明
 

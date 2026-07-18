@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4efe5">
+  <meta name="description" content="易經六十四卦與易傳原文查閱、螢光筆註解">
+  <title>周易讀本</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <button id="menu-button" class="icon-button" type="button" aria-controls="drawer" aria-expanded="false" aria-label="開啟目錄">☰</button>
+    <div class="brand"><span>周易</span><small id="page-label">六十四卦</small></div>
+    <button id="notes-button" class="icon-button" type="button" aria-controls="notes-panel" aria-label="查看本機註解">✦</button>
+  </header>
+
+  <div id="backdrop" class="backdrop" hidden></div>
+  <aside id="drawer" class="drawer" aria-label="閱讀目錄" aria-hidden="true">
+    <div class="drawer-head"><strong>閱讀目錄</strong><button id="close-menu" class="close-button" type="button" aria-label="關閉目錄">×</button></div>
+    <nav id="primary-nav" class="primary-nav"></nav>
+    <div id="hexagram-tools">
+      <label class="search"><span>搜尋六十四卦</span><input id="search" type="search" placeholder="乾、潛龍、卦序…" autocomplete="off"></label>
+      <p id="result-count" class="result-count" aria-live="polite"></p>
+      <nav id="hexagram-list" class="hexagram-list"></nav>
+    </div>
+  </aside>
+
+  <main id="reader" class="reader" aria-live="polite"><p class="loading">正在展卷……</p></main>
+
+  <button id="highlight-action" class="highlight-action" type="button" hidden>
+    <span class="marker-dot"></span>加入螢光筆註解
+  </button>
+
+  <section id="notes-panel" class="notes-panel" hidden aria-label="本機螢光筆註解">
+    <div class="notes-head"><div><strong>我的螢光筆</strong><small>僅保存在這個瀏覽器</small></div><button id="close-notes" class="close-button" type="button" aria-label="關閉註解">×</button></div>
+    <div id="notes-list" class="notes-list"></div>
+  </section>
+  <div id="annotation-modal" class="modal" hidden>
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="annotation-title">
+      <div class="modal-head"><strong id="annotation-title">新增註解</strong><button id="close-annotation" class="close-button" type="button" aria-label="關閉註解編輯">×</button></div>
+      <blockquote id="selected-quote" class="selected-quote"></blockquote>
+      <form id="annotation-form">
+        <label class="annotation-label" for="annotation-text">註解內容</label>
+        <textarea id="annotation-text" rows="5" maxlength="1000" placeholder="寫下你的理解、問題或心得……" required></textarea>
+        <div class="modal-actions"><button id="cancel-annotation" class="secondary-button" type="button">取消</button><button class="submit-button" type="submit">儲存註解</button></div>
+      </form>
+    </section>
+  </div>
+  <div id="bubble-tooltip" class="bubble-tooltip" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
