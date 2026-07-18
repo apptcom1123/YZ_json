@@ -12,6 +12,7 @@
 如有錯漏，歡迎修正。
 
 ## Update
+2026.07.18: Website is built.
 2026.07.11: This repo is created.
 
 ## 1. 項目結構
