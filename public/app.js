@@ -17,9 +17,19 @@ function bindUI(){
   $('#notes-button').onclick=openNotes; $('#close-notes').onclick=closeAll;
   search.oninput=e=>{state.query=e.target.value.trim().toLowerCase();renderHexagramList();};
   addEventListener('hashchange',route); addEventListener('resize',()=>requestAnimationFrame(applyHighlights));
+  addEventListener('scroll',hideBubble,{passive:true});
   document.addEventListener('selectionchange',captureSelection);
-  $('#highlight-action').addEventListener('pointerdown',e=>e.preventDefault());
-  $('#highlight-action').onclick=()=>openAnnotationModal();
+  document.addEventListener('pointerdown',event=>{
+    if(!event.target.closest('.annotation-bubble,#bubble-tooltip'))hideBubble();
+  });
+  $('#open-annotation').addEventListener('pointerdown',event=>{
+    event.preventDefault();
+    openAnnotationModal();
+  });
+  $('#cancel-selection').addEventListener('pointerdown',event=>{
+    event.preventDefault();
+    cancelPendingSelection();
+  });
   $('#close-annotation').onclick=closeAnnotationModal; $('#cancel-annotation').onclick=closeAnnotationModal;
   $('#annotation-form').onsubmit=submitAnnotation;
 }
@@ -85,12 +95,19 @@ function inline(text){return esc(text).replace(/\*\*(.+?)\*\*/g,'<strong class="
 
 function captureSelection(){
   const selection=getSelection(),root=$('.annotatable');
-  if(!root||!selection||selection.isCollapsed||!selection.rangeCount)return;
+  if(!root||!selection||selection.isCollapsed||!selection.rangeCount){
+    if($('#annotation-modal').hidden){state.pending=null;$('#highlight-action').hidden=true;}
+    return;
+  }
   const range=selection.getRangeAt(0);if(!root.contains(range.commonAncestorContainer))return;
   const before=document.createRange();before.selectNodeContents(root);before.setEnd(range.startContainer,range.startOffset);
   const text=selection.toString().trim();if(!text)return;
   state.pending={doc:root.dataset.doc,start:before.toString().length,end:before.toString().length+selection.toString().length,text,createdAt:Date.now()};
   $('#highlight-action').hidden=false;
+}
+
+function cancelPendingSelection(){
+  state.pending=null;getSelection()?.removeAllRanges();$('#highlight-action').hidden=true;
 }
 
 function openAnnotationModal(note){

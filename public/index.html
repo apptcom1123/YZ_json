@@ -29,9 +29,10 @@
 
   <main id="reader" class="reader" aria-live="polite"><p class="loading">正在展卷……</p></main>
 
-  <button id="highlight-action" class="highlight-action" type="button" hidden>
-    <span class="marker-dot"></span>加入螢光筆註解
-  </button>
+  <div id="highlight-action" class="highlight-action" hidden>
+    <button id="open-annotation" class="highlight-open" type="button"><span class="marker-dot"></span>新增註解</button>
+    <button id="cancel-selection" class="highlight-close" type="button" aria-label="取消新增註解">×</button>
+  </div>
 
   <section id="notes-panel" class="notes-panel" hidden aria-label="本機螢光筆註解">
     <div class="notes-head"><div><strong>我的螢光筆</strong><small>僅保存在這個瀏覽器</small></div><button id="close-notes" class="close-button" type="button" aria-label="關閉註解">×</button></div>

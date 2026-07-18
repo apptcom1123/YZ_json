@@ -17,7 +17,7 @@
 ```text
 .
 ├─ heluolishu/
-│  ├─ hllx_card.json
+│  └─ hllx_card.json
 ├─ iching/
 │  ├─ iching.json
 │  ├─ array-name_dict.json
@@ -40,10 +40,21 @@
 │  ├─ 雜卦.md
 │  └─ 占卜流程.md
 ├─ image/
+│  └─ *.jpg
+├─ public/
+│  ├─ index.html
+│  ├─ app.js
+│  └─ style.css
+├─ scripts/
+│  └─ build.js
 ├─ .gitignore
+├─ package.json
 ├─ process.ipynb
-└─ Readme.md
+├─ Readme.md
+└─ vercel.json
 ```
+
+其中 `dist/` 是執行 `npm run build` 後產生的靜態網站，不納入 Git；`.vercel/` 是 Vercel CLI 的本機專案連結設定，也不納入 Git。
 
 ## 2. 內容說明
 
@@ -181,7 +192,7 @@
 | `text` | 詩訣正文，保留換行 |
 | `created_at` | 建立時間，ISO 8601 格式 |
 
-## 易傳篇目代號
+### 易傳篇目代號
 
 `iching/zhuan_dict.json` 內容如下：
 
@@ -195,9 +206,105 @@
 | 雜卦 | `za` | 兩卦對舉，概括卦意 |
 | 繫辭 | `ji` | 《易》後附義理文字 |
 
-## 使用方式
+## 4. 本地網站試用
 
-若只需查閱內容，直接打開 `md/` 或 JSON 檔即可。
+網站採純靜態架構。Vercel 部署時會執行 `scripts/build.js`，將 `public/`、`iching/iching.json`、`image/` 與 `md/` 整理至 `dist/`，不需要另外架設 Node.js HTTP 伺服器或資料庫後台。
+
+### 4.1 安裝 Node.js
+
+前往 [Node.js 官方網站](https://nodejs.org/)下載並安裝 LTS 版本。安裝完成後重新開啟終端機，確認版本：
+
+```bash
+node --version
+npm --version
+```
+
+### 4.2 取得專案
+
+使用 Git：
+
+```bash
+git clone https://github.com/apptcom1123/YZ_json.git
+cd YZ_json
+```
+
+若已下載專案，直接進入專案目錄：
+
+```bat
+cd C:\Users\n2000\Downloads\YZ_json
+```
+
+### 4.3 建置靜態網站
+
+```bash
+npm run build
+```
+
+成功後會產生 `dist/`，其中包含可部署的首頁、JavaScript、CSS、六十四卦 JSON、Markdown 原文與圖片。
+
+Windows PowerShell 若因執行原則無法執行 `npm.ps1`，可改用：
+
+```bat
+npm.cmd run build
+```
+
+### 4.4 在本機預覽
+
+先完成 `npm run build`，再啟動靜態網站預覽：
+
+```bash
+npm run preview
+```
+
+第一次執行時，`npx` 會自動下載 `serve`。然後用瀏覽器開啟終端機顯示的本機網址，預設通常為：
+
+```text
+http://localhost:3000
+```
+
+Windows PowerShell 若因執行原則無法執行 `npm.ps1`，可改用：
+
+```bat
+npm.cmd run preview
+```
+
+按 `Ctrl + C` 可停止本機預覽。
+
+### 4.5 安裝 Vercel CLI 並部署
+
+```bash
+npm install --global vercel
+vercel login
+```
+
+Windows PowerShell 若無法執行 `vercel.ps1`，請使用：
+
+```bat
+vercel.cmd login
+```
+
+首次建立或連結 Vercel 專案並產生預覽部署：
+
+```bash
+vercel
+```
+
+確認預覽正常後部署至正式環境：
+
+```bash
+vercel --prod
+```
+
+Windows PowerShell 可對應使用：
+
+```bat
+vercel.cmd
+vercel.cmd --prod
+```
+
+專案已透過 `vercel.json` 指定 `npm run build` 為建置指令、`dist` 為輸出目錄。部署完成後，Vercel 顯示的 `Aliased` 網址是適合公開分享的固定網址。
+
+螢光筆註解只保存在使用者瀏覽器的 `localStorage`，不會上傳至 Vercel 或任何資料庫。清除網站資料、切換瀏覽器、裝置或網域時，註解不會自動同步。
 
 ## 版權聲明
 
