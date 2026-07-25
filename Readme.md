@@ -12,6 +12,7 @@
 如有錯漏，歡迎修正。
 
 ## Update
+2026.07.25: Divination function added.
 2026.07.18: Website is built.
 2026.07.11: This repo is created.
 
@@ -50,6 +51,7 @@
 │  └─ style.css
 ├─ scripts/
 │  └─ build.js
+├─ tests/
 ├─ .gitignore
 ├─ package.json
 ├─ process.ipynb

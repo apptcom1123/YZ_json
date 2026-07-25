@@ -34,9 +34,19 @@
     <button id="cancel-selection" class="highlight-close" type="button" aria-label="取消新增註解">×</button>
   </div>
 
-  <section id="notes-panel" class="notes-panel" hidden aria-label="本機螢光筆註解">
-    <div class="notes-head"><div><strong>我的螢光筆</strong><small>僅保存在這個瀏覽器</small></div><button id="close-notes" class="close-button" type="button" aria-label="關閉註解">×</button></div>
+  <section id="notes-panel" class="notes-panel" hidden aria-label="儲存資訊">
+    <div class="notes-head">
+      <div>
+        <strong>儲存資訊</strong>
+        <div class="storage-tabs">
+          <button class="storage-tab active" data-tab="highlights" type="button">我的註記</button>
+          <button class="storage-tab" data-tab="divinations" type="button">占卜紀錄</button>
+        </div>
+        <small>僅保存在這個瀏覽器</small>
+      </div>
+    </div>
     <div id="notes-list" class="notes-list"></div>
+    <div id="divinations-list" class="notes-list" hidden></div>
   </section>
   <div id="annotation-modal" class="modal" hidden>
     <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="annotation-title">
@@ -51,5 +61,63 @@
   </div>
   <div id="bubble-tooltip" class="bubble-tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- 浮動占卜按鈕 -->
+  <button id="divination-fab" class="divination-fab" type="button" aria-label="開啟占卜">占</button>
+
+  <!-- 占卜模態框 -->
+  <div id="divination-modal" class="modal" hidden>
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="divination-title">
+      <div class="modal-head"><strong id="divination-title">易經占卜</strong><button id="close-divination" class="close-button" type="button" aria-label="關閉占卜">×</button></div>
+      <form id="divination-form">
+        <label class="annotation-label" for="divination-question">請輸入提問</label>
+        <textarea id="divination-question" rows="3" maxlength="200" placeholder="請提出你的疑問或所求……" required></textarea>
+        <div class="modal-actions">
+          <button id="cancel-divination" class="secondary-button" type="button">取消</button>
+          <button class="submit-button" type="submit">開始占卜</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- 占卜結果編輯模態框 -->
+  <div id="edit-divination-modal" class="modal" hidden>
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-divination-title">
+      <div class="modal-head"><strong id="edit-divination-title">編輯占卜紀錄</strong><button id="close-edit-divination" class="close-button" type="button" aria-label="關閉編輯">×</button></div>
+      <form id="edit-divination-form">
+        <label class="annotation-label" for="edit-divination-question">提問</label>
+        <textarea id="edit-divination-question" rows="3" maxlength="200" placeholder="提問內容……" required></textarea>
+        <div class="modal-actions">
+          <button id="cancel-edit-divination" class="secondary-button" type="button">取消</button>
+          <button class="submit-button" type="submit">更新紀錄</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- 占卜結果模態框 -->
+  <div id="divination-result-modal" class="modal" hidden>
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="divination-result-title">
+      <div class="modal-head"><strong id="divination-result-title">占卜結果</strong><button id="close-divination-result" class="close-button" type="button" aria-label="關閉結果">×</button></div>
+      <div id="divination-animation" class="divination-animation">
+        <div class="line-animation"></div>
+        <div class="line-animation"></div>
+        <div class="line-animation"></div>
+        <div class="line-animation"></div>
+        <div class="line-animation"></div>
+        <div class="line-animation"></div>
+      </div>
+      <div id="divination-result-content" hidden>
+        <div id="result-main-display"></div>
+        <div id="result-changing-lines" style="margin-top:12px;margin-bottom:16px"></div>
+        <div id="result-explanation" style="color:#888;font-size:0.85rem;margin-bottom:12px"></div>
+        <div id="result-hexagram" class="hexagram-result" style="margin-top:16px;padding-top:16px;border-top:1px solid #ddd"></div>
+        <div class="modal-actions" style="margin-top:16px">
+          <button id="cancel-result" class="secondary-button" type="button">取消</button>
+          <button id="save-divination" class="submit-button" type="button">儲存紀錄</button>
+        </div>
+      </div>
+    </section>
+  </div>
 </body>
 </html>
