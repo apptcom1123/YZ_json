@@ -52,17 +52,31 @@ export class UserRepository extends BaseRepository {
     });
 
     // 為新用戶創建設定
-    const db = this.db;
-    await db.run(`
-      INSERT INTO user_settings (user_id, terms_accepted)
-      VALUES (?, 0)
-    `, [userId]);
+    if (this.isSupabase) {
+      await this.db.from('user_settings').insert({
+        user_id: userId,
+        terms_accepted: false
+      });
+    } else {
+      const db = this.db;
+      await db.run(`
+        INSERT INTO user_settings (user_id, terms_accepted)
+        VALUES (?, 0)
+      `, [userId]);
+    }
 
     // 為新用戶創建統計
-    await db.run(`
-      INSERT INTO user_stats (user_id)
-      VALUES (?)
-    `, [userId]);
+    if (this.isSupabase) {
+      await this.db.from('user_stats').insert({
+        user_id: userId
+      });
+    } else {
+      const db = this.db;
+      await db.run(`
+        INSERT INTO user_stats (user_id)
+        VALUES (?)
+      `, [userId]);
+    }
 
     return this.findById(userId);
   }
