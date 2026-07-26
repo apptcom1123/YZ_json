@@ -4,6 +4,11 @@
 
 import express from 'express';
 import {
+  startGoogleOAuthFlow,
+  handleGoogleOAuthCallback,
+  isGoogleOAuthConfigured
+} from '../middleware/googleOAuth.js';
+import {
   startMockOAuthFlow,
   handleMockOAuthCallback,
   getTestAccounts
@@ -35,39 +40,81 @@ router.post('/google/start', (req, res) => {
   const { returnTo } = req.body;
   const validReturnTo = validateReturnTo(returnTo || '/');
 
-  const { authUrl, state, nonce } = startMockOAuthFlow(validReturnTo);
-
-  // 在實際應用中，這會重定向到 Google
-  // 在本地開發中，我們返回 authUrl 讓前端處理
-  res.json({
-    authUrl,
-    state,
-    nonce,
-    dev_note: 'Mock OAuth flow - select account at authUrl'
-  });
+  try {
+    // 優先使用真實 Google OAuth，如果未配置則使用 Mock
+    if (isGoogleOAuthConfigured()) {
+      console.log('🔵 使用真實 Google OAuth');
+      const { authUrl, state, nonce } = startGoogleOAuthFlow(validReturnTo);
+      res.json({
+        authUrl,
+        state,
+        nonce,
+        mode: 'google-oauth'
+      });
+    } else {
+      console.log('🟡 未配置 Google OAuth，使用 Mock OAuth');
+      const { authUrl, state, nonce } = startMockOAuthFlow(validReturnTo);
+      res.json({
+        authUrl,
+        state,
+        nonce,
+        mode: 'mock-oauth',
+        dev_note: '開發模式 - 請在 authUrl 選擇測試帳號'
+      });
+    }
+  } catch (error) {
+    console.error('OAuth start error:', error);
+    res.status(400).json({
+      error: 'OAUTH_START_FAILED',
+      message: error.message
+    });
+  }
 });
 
 /**
  * POST /api/auth/google/callback
- * 處理 OAuth 回調
+ * 處理 OAuth 回調（支持真實 Google OAuth 和 Mock OAuth）
  */
 router.post('/google/callback', async (req, res) => {
   try {
-    const { state, nonce, selectedAccount } = req.body;
+    const { state, code, selectedAccount, nonce } = req.body;
 
-    if (!state || !nonce) {
+    if (!state) {
       return res.status(400).json({
         error: 'INVALID_REQUEST',
-        message: '缺少必要參數'
+        message: '缺少 state 參數'
       });
     }
 
-    // 處理 Mock OAuth
-    const { idToken, profile, returnTo } = handleMockOAuthCallback(
-      state,
-      nonce,
-      selectedAccount || 'test1'
-    );
+    let profile, idToken, returnTo;
+
+    // 判斷使用真實 Google OAuth 還是 Mock OAuth
+    if (code) {
+      // 真實 Google OAuth 流程
+      console.log('🔵 處理真實 Google OAuth 回調');
+      const oauthResult = await handleGoogleOAuthCallback(state, code);
+      profile = oauthResult.profile;
+      idToken = oauthResult.idToken;
+      returnTo = oauthResult.returnTo;
+    } else if (nonce) {
+      // Mock OAuth 流程
+      console.log('🟡 處理 Mock OAuth 回調');
+      if (!nonce) {
+        return res.status(400).json({
+          error: 'INVALID_REQUEST',
+          message: '缺少 nonce 參數'
+        });
+      }
+      const mockResult = handleMockOAuthCallback(state, nonce, selectedAccount || 'test1');
+      profile = mockResult.profile;
+      idToken = mockResult.idToken;
+      returnTo = mockResult.returnTo;
+    } else {
+      return res.status(400).json({
+        error: 'INVALID_REQUEST',
+        message: '缺少 code（Google OAuth）或 nonce（Mock OAuth）'
+      });
+    }
 
     // 使用 Repository 創建或更新用戶
     const { user: userRepo } = req.app.locals.repositories;
@@ -106,8 +153,8 @@ router.post('/google/callback', async (req, res) => {
   } catch (error) {
     console.error('OAuth callback error:', error);
     res.status(400).json({
-      error: error.message,
-      message: error.message
+      error: 'OAUTH_CALLBACK_FAILED',
+      message: error.message || '登入失敗，請稍後重試'
     });
   }
 });

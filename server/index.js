@@ -55,20 +55,50 @@ app.use(attachUserInfo);
 async function initializeApp() {
   try {
     console.log('🔄 初始化數據庫...');
-    const db = await initDatabase(DB_PATH);
+    
+    let repositories, db;
+    let dbProvider = 'SQLite';
 
-    // 初始化 repositories
-    const repositories = {
-      user: new UserRepository(db),
-      note: new NoteRepository(db),
-      divination: new DivinationRepository(db),
-      reply: new NoteReplyRepository(db),
-      notification: new NotificationRepository(db)
-    };
+    // 判斷使用 Supabase 還是 SQLite
+    if (SUPABASE_URL && SUPABASE_KEY) {
+      console.log('🟦 使用 Supabase PostgreSQL 作為數據庫');
+      dbProvider = 'Supabase PostgreSQL';
+      
+      // 使用 Supabase 客戶端
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+      
+      // 初始化 Supabase repositories
+      repositories = {
+        user: new UserRepository(supabaseClient),
+        note: new NoteRepository(supabaseClient),
+        divination: new DivinationRepository(supabaseClient),
+        reply: new NoteReplyRepository(supabaseClient),
+        notification: new NotificationRepository(supabaseClient)
+      };
+      
+      app.locals.supabaseClient = supabaseClient;
+      db = supabaseClient;
+    } else {
+      console.log('🟩 使用 SQLite 作為數據庫（開發環境）');
+      dbProvider = 'SQLite';
+      
+      db = await initDatabase(DB_PATH);
+
+      // 初始化 SQLite repositories
+      repositories = {
+        user: new UserRepository(db),
+        note: new NoteRepository(db),
+        divination: new DivinationRepository(db),
+        reply: new NoteReplyRepository(db),
+        notification: new NotificationRepository(db)
+      };
+    }
 
     // 將 repositories 存儲在 app.locals 中
     app.locals.repositories = repositories;
     app.locals.db = db;
+    app.locals.dbProvider = dbProvider;
 
     // 初始化 Supabase Realtime 服務
     if (SUPABASE_URL && SUPABASE_KEY) {
@@ -76,12 +106,11 @@ async function initializeApp() {
       const realtimeService = getRealtimeService(SUPABASE_URL, SUPABASE_KEY);
       app.locals.realtimeService = realtimeService;
     } else {
-      console.log('⚠️  未配置 Supabase，Realtime 功能禁用');
-      console.log('   (設置 SUPABASE_URL 和 SUPABASE_KEY 環境變數啟用)');
+      console.log('⚠️  未配置 Supabase Realtime');
       app.locals.realtimeService = null;
     }
 
-    console.log('✓ 數據庫已初始化');
+    console.log(`✓ 數據庫已初始化 (${dbProvider})`);
     return db;
   } catch (error) {
     console.error('✗ 初始化失敗:', error);
