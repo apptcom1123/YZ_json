@@ -3,6 +3,7 @@
  * Express 應用配置與啟動
  */
 
+import 'dotenv/config.js';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -202,6 +203,11 @@ async function startServer() {
 
     // 啟動服務器
     app.listen(PORT, () => {
+      const dbProvider = app.locals.dbProvider || 'SQLite';
+      const dbLocation = dbProvider === 'Supabase PostgreSQL' 
+        ? SUPABASE_URL 
+        : DB_PATH;
+
       console.log('');
       console.log('╔════════════════════════════════════════╗');
       console.log('║     周易讀本 - 本地開發服務器          ║');
@@ -214,8 +220,8 @@ async function startServer() {
       console.log('   - test2@example.com (測試用戶二)');
       console.log('   - admin@example.com (管理員)');
       console.log('');
-      console.log('💾 數據庫: SQLite (PostgreSQL 兼容)');
-      console.log(`📁 位置: ${DB_PATH}`);
+      console.log(`💾 數據庫: ${dbProvider === 'Supabase PostgreSQL' ? 'Supabase PostgreSQL' : 'SQLite (PostgreSQL 兼容)'}`);
+      console.log(`📁 位置: ${dbLocation}`);
       console.log('');
       console.log('⚙️  API 端點:');
       console.log('   - GET  /api/health');
@@ -227,7 +233,7 @@ async function startServer() {
       console.log('');
       console.log('🔧 環境變量:');
       console.log(`   - PORT=${PORT}`);
-      console.log(`   - DB_PATH=${DB_PATH}`);
+      console.log(`   - DB_PROVIDER=${dbProvider}`);
       console.log('');
     });
   } catch (error) {

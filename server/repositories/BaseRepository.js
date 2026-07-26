@@ -34,6 +34,35 @@ export class BaseRepository {
   }
 
   /**
+   * 查詢單筆記錄（根據條件）
+   * 例如：findOne({ email: 'test@example.com' })
+   */
+  async findOne(where = {}) {
+    if (this.isSupabase) {
+      let query = this.db.from(this.tableName).select('*').is('deleted_at', null);
+      
+      for (const [key, value] of Object.entries(where)) {
+        query = query.eq(key, value);
+      }
+      
+      const { data, error } = await query.single();
+      if (error && error.code !== 'PGRST116') throw error;
+      return data || null;
+    } else {
+      if (Object.keys(where).length === 0) {
+        throw new Error('findOne requires at least one where condition');
+      }
+      
+      const conditions = Object.entries(where)
+        .map(([key, value]) => `${key} = ?`)
+        .join(' AND ');
+      const query = `SELECT * FROM ${this.tableName} WHERE ${conditions} AND deleted_at IS NULL LIMIT 1`;
+      const params = Object.values(where);
+      return this.db.get(query, params) || null;
+    }
+  }
+
+  /**
    * 查詢多筆記錄
    */
   async findAll(options = {}) {

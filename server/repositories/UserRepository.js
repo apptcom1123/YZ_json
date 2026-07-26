@@ -10,16 +10,14 @@ export class UserRepository extends BaseRepository {
    * 通過 Google Sub 查找用戶
    */
   async findByGoogleSub(googleSub) {
-    const query = `SELECT * FROM users WHERE google_sub = ?`;
-    return this.db.get(query, [googleSub]);
+    return this.findOne({ google_sub: googleSub });
   }
 
   /**
    * 通過 Email 查找用戶
    */
   async findByEmail(email) {
-    const query = `SELECT * FROM users WHERE email = ?`;
-    return this.db.get(query, [email]);
+    return this.findOne({ email });
   }
 
   /**
@@ -73,13 +71,29 @@ export class UserRepository extends BaseRepository {
    * 獲取用戶的完整信息（含設定）
    */
   async getUserWithSettings(userId) {
-    const query = `
-      SELECT u.*, us.* 
-      FROM users u
-      LEFT JOIN user_settings us ON u.id = us.user_id
-      WHERE u.id = ?
-    `;
-    return this.db.get(query, [userId]);
+    const user = await this.findById(userId);
+    if (!user) return null;
+
+    // 從 user_settings 表獲取設置
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error;
+      const settings = data || {};
+      return { ...user, ...settings };
+    } else {
+      const query = `
+        SELECT u.*, us.* 
+        FROM users u
+        LEFT JOIN user_settings us ON u.id = us.user_id
+        WHERE u.id = ? AND u.deleted_at IS NULL
+      `;
+      return this.db.get(query, [userId]) || null;
+    }
   }
 
   /**
@@ -126,11 +140,11 @@ export class UserRepository extends BaseRepository {
    * 檢查用戶是否已接受條款
    */
   async hasAcceptedTerms(userId, version) {
-    const query = `
-      SELECT * FROM legal_consents
-      WHERE user_id = ? AND doc_type = 'terms' AND doc_version = ?
-    `;
-    return this.db.get(query, [userId, version]);
+    return this.findOne({ 
+      user_id: userId, 
+      doc_type: 'terms', 
+      doc_version: version 
+    });
   }
 
   /**
@@ -219,9 +233,19 @@ export class UserRepository extends BaseRepository {
     if (!user.is_active) return { allowed: false, reason: 'ACCOUNT_DISABLED', disabledReason: user.disabled_reason };
     if (user.deleted_at) return { allowed: false, reason: 'ACCOUNT_DELETED' };
 
-    const settings = await this.db.get(`
-      SELECT terms_accepted FROM user_settings WHERE user_id = ?
-    `, [userId]);
+    let settings;
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('user_settings')
+        .select('terms_accepted')
+        .eq('user_id', userId)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error;
+      settings = data;
+    } else {
+      settings = this.db.get('SELECT terms_accepted FROM user_settings WHERE user_id = ?', [userId]);
+    }
 
     if (!settings?.terms_accepted) {
       return { allowed: false, reason: 'TERMS_NOT_ACCEPTED' };
@@ -234,9 +258,18 @@ export class UserRepository extends BaseRepository {
    * 獲取用戶統計
    */
   async getUserStats(userId) {
-    const query = `
-      SELECT * FROM user_stats WHERE user_id = ?
-    `;
-    return this.db.get(query, [userId]);
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('user_stats')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error;
+      return data || null;
+    } else {
+      const query = `SELECT * FROM user_stats WHERE user_id = ?`;
+      return this.db.get(query, [userId]) || null;
+    }
   }
 }

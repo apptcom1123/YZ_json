@@ -72,21 +72,29 @@ export function getTestAccounts() {
 
 /**
  * 模擬 OAuth callback
+ * 支持開發環境：如果 state 不在存儲中（例如直接調用 API），仍然允許登入
  */
 export function handleMockOAuthCallback(state, nonce, selectedAccount = 'test1') {
-  // 驗證狀態
-  if (!mockOAuthStates.has(state)) {
-    throw new Error('INVALID_STATE');
-  }
+  let returnTo = '/';
 
-  const stateData = mockOAuthStates.get(state);
-  if (stateData.expiresAt < Date.now()) {
+  // 開發環境寬鬆驗證：如果 state 不存在，允許直接使用（用於 API 測試）
+  if (mockOAuthStates.has(state)) {
+    const stateData = mockOAuthStates.get(state);
+    if (stateData.expiresAt < Date.now()) {
+      mockOAuthStates.delete(state);
+      throw new Error('STATE_EXPIRED');
+    }
+
+    if (stateData.nonce !== nonce) {
+      throw new Error('INVALID_NONCE');
+    }
+
+    returnTo = stateData.returnTo;
+    // 清理狀態
     mockOAuthStates.delete(state);
-    throw new Error('STATE_EXPIRED');
-  }
-
-  if (stateData.nonce !== nonce) {
-    throw new Error('INVALID_NONCE');
+  } else {
+    // 開發環境允許：直接 API 調用時 state 可能不在存儲中
+    console.log('💡 Mock OAuth：State 不在存儲中，允許直接 API 測試');
   }
 
   // 取得測試帳號
@@ -94,9 +102,6 @@ export function handleMockOAuthCallback(state, nonce, selectedAccount = 'test1')
   if (!account) {
     throw new Error('UNKNOWN_ACCOUNT');
   }
-
-  // 清理狀態
-  mockOAuthStates.delete(state);
 
   // 返回 ID Token 格式的模擬信息
   return {
@@ -109,7 +114,7 @@ export function handleMockOAuthCallback(state, nonce, selectedAccount = 'test1')
       _disabled: account._disabled || false,
       _disabledReason: account._disabledReason || null
     },
-    returnTo: stateData.returnTo
+    returnTo
   };
 }
 
