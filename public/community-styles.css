@@ -1,0 +1,396 @@
+/* Community Features Styles */
+
+/* Auth Container */
+.auth-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Login Button */
+.login-button {
+  transition: transform 0.2s;
+}
+
+.login-button:hover {
+  transform: scale(1.1);
+}
+
+/* User Menu */
+.user-menu {
+  position: relative;
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--white);
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 200px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  margin-top: 8px;
+}
+
+.user-info {
+  padding: 12px;
+  font-size: 0.9rem;
+}
+
+.user-info strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.user-info small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.menu-item:hover {
+  background: var(--deep);
+}
+
+.menu-item:first-of-type {
+  border-top: 1px solid var(--line);
+}
+
+/* Threshold Control */
+.threshold-control {
+  padding: 8px 0;
+}
+
+.threshold-control label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.threshold-control input[type="range"] {
+  flex: 1;
+  max-width: 150px;
+}
+
+/* Note Bubble */
+.note-bubble {
+  display: inline-block;
+  background: #f4d84c;
+  border: 1px solid #b49b25;
+  border-radius: 50% 50% 50% 4px;
+  padding: 4px 8px;
+  margin: 0 2px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: bold;
+  transition: transform 0.2s;
+}
+
+.note-bubble:hover {
+  transform: scale(1.15);
+}
+
+/* Accounts List in Login Modal */
+.accounts-list {
+  display: grid;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.account-item {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--white);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.account-item:hover {
+  border-color: var(--red);
+  background: #fff9d7;
+}
+
+.account-name {
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+
+.account-email {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.account-disabled {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: #999;
+}
+
+/* Notes List Modal */
+.notes-list-modal {
+  display: grid;
+  gap: 12px;
+  max-height: calc(80vh - 150px);
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.note-item {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #f9f6f0;
+}
+
+.note-author {
+  font-weight: bold;
+  color: var(--red);
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.note-content {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 8px;
+  color: var(--ink);
+}
+
+.note-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.note-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.note-actions button {
+  border: 1px solid var(--line);
+  background: var(--white);
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.note-actions button:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* Form Styles for Settings */
+.form-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: var(--ink);
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--white);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.form-group input[type="checkbox"],
+.form-group input[type="radio"] {
+  margin-right: 6px;
+  cursor: pointer;
+}
+
+.form-group .checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.form-group input[type="range"] {
+  width: 100%;
+  cursor: pointer;
+}
+
+.range-value {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Button Styles */
+.submit-button {
+  padding: 10px 16px;
+  background: var(--red);
+  color: var(--white);
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.submit-button:hover {
+  background: #7a2f25;
+}
+
+.secondary-button {
+  padding: 10px 16px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.secondary-button:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* Confirmation Dialog */
+.confirm-dialog {
+  padding: 16px;
+}
+
+.confirm-message {
+  margin-bottom: 12px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.confirm-warning {
+  padding: 12px;
+  background: #fff3cd;
+  border-left: 3px solid #ff9800;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  color: #333;
+  border-radius: 3px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Terms Modal */
+.terms-content {
+  max-height: calc(80vh - 150px);
+  overflow-y: auto;
+  padding: 12px;
+  line-height: 1.8;
+  font-size: 0.9rem;
+}
+
+.terms-content h2 {
+  font-size: 1.1rem;
+  margin: 16px 0 8px;
+  color: var(--red);
+}
+
+.terms-content p {
+  margin: 8px 0;
+}
+
+.terms-content ol,
+.terms-content ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.terms-content li {
+  margin: 4px 0;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .user-dropdown {
+    position: fixed;
+    top: 60px;
+    right: 0;
+    left: 0;
+    border: 0;
+    border-radius: 0;
+    min-width: auto;
+  }
+
+  .notes-list-modal {
+    max-height: calc(100vh - 200px);
+  }
+
+  .account-item {
+    padding: 10px;
+  }
+
+  .note-item {
+    padding: 10px;
+  }
+}

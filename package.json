@@ -2,9 +2,28 @@
   "name": "iching-reader",
   "version": "1.0.0",
   "private": true,
-  "description": "易經六十四卦簡易查閱網站",
+  "description": "易經六十四卦簡易查閱網站 + 個人占卜紀錄 + 公開協作註記",
+  "type": "module",
   "scripts": {
     "build": "node scripts/build.js",
-    "preview": "npx --yes serve dist"
+    "preview": "npx --yes serve dist",
+    "dev": "node server/index.js",
+    "dev:with-build": "npm run build && node server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "sqlite3": "^5.1.6",
+    "sqlite": "^5.0.1",
+    "uuid": "^9.0.0",
+    "jwt-simple": "^0.5.6",
+    "@supabase/supabase-js": "^2.38.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.17",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

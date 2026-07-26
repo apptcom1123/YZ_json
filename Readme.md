@@ -4,6 +4,10 @@
 
 另架設一簡單前端網站供使用者查看 : https://iching-reader-seven.vercel.app/
 
+此網站後續擴充「個人占卜紀錄 + 公開協作註記」系統，讓使用者可安全保存自己的資料，並可選擇將註記公開給社群討論。
+
+
+
 部分資料來自：
 
 - https://github.com/john-walks-slow/open-iching
@@ -12,6 +16,9 @@
 如有錯漏，歡迎修正。
 
 ## Update
+> 後續內容擴充方向：- 帛書版易經 - 歸藏易經 版本的加入
+
+2026.07.26: 
 2026.07.25: Divination function added.
 2026.07.18: Website is built.
 2026.07.11: This repo is created.

@@ -7,13 +7,71 @@
   <meta name="description" content="易經六十四卦與易傳原文查閱、螢光筆註解">
   <title>周易讀本</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/community-styles.css">
+  <script src="/api-client.js" defer></script>
+  <script src="/auth-manager.js" defer></script>
+  <script src="/sync-service.js" type="module" defer></script>
+  <script src="/realtime-client.js" defer></script>
   <script src="/app.js" defer></script>
+  <script src="/personal-center.js" defer></script>
+  <script src="/community-features.js" type="module" defer></script>
 </head>
 <body>
   <header class="topbar">
     <button id="menu-button" class="icon-button" type="button" aria-controls="drawer" aria-expanded="false" aria-label="開啟目錄">☰</button>
     <div class="brand"><span>周易</span><small id="page-label">六十四卦</small></div>
-    <button id="notes-button" class="icon-button" type="button" aria-controls="notes-panel" aria-label="查看本機註解">✦</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="notes-button" class="icon-button" type="button" aria-controls="notes-panel" aria-label="個人中心">✦</button>
+      <div id="auth-container" style="display:flex;gap:8px;align-items:center">
+        <!-- 登入按鈕（未登入時顯示） -->
+        <button id="login-button" class="icon-button" type="button" aria-label="登入" style="display:none">●</button>
+        <!-- 用戶菜單（已登入時顯示） -->
+        <div id="user-menu" style="display:none;position:relative">
+          <button id="user-menu-toggle" class="icon-button user-menu-logged-in" type="button" aria-haspopup="menu" aria-label="用戶選單">●</button>
+          <div id="user-menu-dropdown" class="user-menu-dropdown" hidden role="menu">
+            <!-- 個人資訊 -->
+            <div class="user-menu-section">
+              <div class="user-menu-label">暱稱</div>
+              <div class="user-menu-nickname-container">
+                <span id="user-nickname" class="user-nickname-display"></span>
+                <button id="edit-nickname-btn" class="edit-btn" type="button" aria-label="編輯暱稱">✎</button>
+              </div>
+              <div id="nickname-edit-form" class="nickname-edit-form" style="display:none;margin-top:8px">
+                <input type="text" id="nickname-input" class="nickname-input" placeholder="輸入新暱稱" maxlength="50">
+                <div style="display:flex;gap:6px;margin-top:6px">
+                  <button id="save-nickname-btn" class="mini-btn primary-btn" type="button">保存</button>
+                  <button id="cancel-nickname-btn" class="mini-btn" type="button">取消</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 統計資料 -->
+            <div class="user-menu-section">
+              <div class="user-menu-label">統計</div>
+              <div class="user-menu-stats">
+                <div class="stat-item">
+                  <span class="stat-label">我的註記</span>
+                  <span class="stat-value" id="stat-notes-count">0</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">好評</span>
+                  <span class="stat-value" id="stat-upvotes">0</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">收藏</span>
+                  <span class="stat-value" id="stat-favorites">0</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 登出 -->
+            <div class="user-menu-section">
+              <button id="logout-button" class="user-menu-item logout-btn" type="button" role="menuitem">登出</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </header>
 
   <div id="backdrop" class="backdrop" hidden></div>
@@ -34,19 +92,91 @@
     <button id="cancel-selection" class="highlight-close" type="button" aria-label="取消新增註解">×</button>
   </div>
 
-  <section id="notes-panel" class="notes-panel" hidden aria-label="儲存資訊">
+  <section id="notes-panel" class="notes-panel" hidden aria-label="個人中心">
     <div class="notes-head">
-      <div>
-        <strong>儲存資訊</strong>
-        <div class="storage-tabs">
-          <button class="storage-tab active" data-tab="highlights" type="button">我的註記</button>
-          <button class="storage-tab" data-tab="divinations" type="button">占卜紀錄</button>
-        </div>
-        <small>僅保存在這個瀏覽器</small>
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:12px">
+        <strong>個人中心</strong>
+        <button id="close-panel" class="close-button" type="button" aria-label="關閉">×</button>
+      </div>
+      <div class="storage-tabs">
+        <button class="storage-tab active" data-tab="divinations" type="button">占卜</button>
+        <button class="storage-tab" data-tab="highlights" type="button">註記</button>
+        <button class="storage-tab" data-tab="favorites" type="button">收藏</button>
+        <button class="storage-tab" data-tab="notifications" type="button">通知</button>
+        <button class="storage-tab" data-tab="settings" type="button">設定</button>
       </div>
     </div>
-    <div id="notes-list" class="notes-list"></div>
-    <div id="divinations-list" class="notes-list" hidden></div>
+
+    <!-- 占卜紀錄分頁 -->
+    <div id="divinations-content" class="notes-list" style="display:block">
+      <div id="divinations-list"></div>
+    </div>
+
+    <!-- 我的註記分頁 -->
+    <div id="highlights-content" class="notes-list" hidden>
+      <div id="notes-list"></div>
+    </div>
+
+    <!-- 收藏註記分頁 -->
+    <div id="favorites-content" class="notes-list" hidden>
+      <div id="favorites-list" style="padding:12px;text-align:center;color:#888">暫無收藏</div>
+    </div>
+
+    <!-- 個人通知分頁 -->
+    <div id="notifications-content" class="notes-list" hidden>
+      <div id="notifications-list" style="padding:12px;text-align:center;color:#888">暫無通知</div>
+    </div>
+
+    <!-- 設定分頁 -->
+    <div id="settings-content" class="notes-list settings-panel" hidden style="padding:16px">
+      <div style="font-size:0.9rem;color:#666">
+        <h4 style="margin:0 0 12px;color:var(--red)">帳號資訊</h4>
+        <div style="margin-bottom:12px">
+          <span style="color:#888">Google 帳號：</span>
+          <span id="settings-account"></span>
+        </div>
+
+        <h4 style="margin:16px 0 12px;color:var(--red)">資料儲存設定</h4>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer">
+          <input type="checkbox" id="settings-save-divinations" />
+          儲存占卜結果到雲端
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer">
+          <input type="checkbox" id="settings-save-notes" />
+          儲存註記到雲端
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer">
+          <input type="checkbox" id="settings-public-notes" />
+          允許公開我的註記
+        </label>
+
+        <h4 style="margin:16px 0 12px;color:var(--red)">公開內容設定</h4>
+        <label style="font-size:0.8rem;color:#888;margin-bottom:8px">
+          公開註記顯示閾值
+        </label>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <input type="range" id="settings-threshold" min="0" max="100" value="50" style="flex:1" />
+          <span id="settings-threshold-value" style="width:35px;text-align:right;font-size:0.8rem">50%</span>
+        </div>
+
+        <h4 style="margin:16px 0 12px;color:var(--red)">通知偏好</h4>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer">
+          <input type="checkbox" id="settings-notify-replies" checked />
+          接收「有人回覆我」的通知
+        </label>
+
+        <h4 style="margin:16px 0 12px;color:var(--red)">危險操作</h4>
+        <button id="settings-clear-local" type="button" class="secondary-button" style="width:100%;margin-bottom:8px;font-size:0.8rem;padding:8px">
+          刪除僅保存在瀏覽器的資料
+        </button>
+        <button id="settings-delete-data" type="button" style="width:100%;margin-bottom:8px;font-size:0.8rem;padding:8px;background:#f5f5f5;border:1px solid #d9534f;color:#d9534f;cursor:pointer;border-radius:4px">
+          刪除雲端個人資料
+        </button>
+        <button id="settings-delete-account" type="button" style="width:100%;font-size:0.8rem;padding:8px;background:#f5f5f5;border:1px solid #d9534f;color:#d9534f;cursor:pointer;border-radius:4px">
+          刪除帳號
+        </button>
+      </div>
+    </div>
   </section>
   <div id="annotation-modal" class="modal" hidden>
     <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="annotation-title">
@@ -55,6 +185,22 @@
       <form id="annotation-form">
         <label class="annotation-label" for="annotation-text">註解內容</label>
         <textarea id="annotation-text" rows="5" maxlength="1000" placeholder="寫下你的理解、問題或心得……" required></textarea>
+        
+        <!-- 可見性選擇 -->
+        <div class="annotation-visibility">
+          <label class="annotation-label">可見性</label>
+          <div class="visibility-options">
+            <label class="radio-option">
+              <input type="radio" name="visibility" value="private" checked>
+              <span>私人 (只有我看得見)</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="visibility" value="public" id="visibility-public">
+              <span>公開 (讓其他使用者看見、投票、收藏)</span>
+            </label>
+          </div>
+        </div>
+        
         <div class="modal-actions"><button id="cancel-annotation" class="secondary-button" type="button">取消</button><button class="submit-button" type="submit">儲存註解</button></div>
       </form>
     </section>
@@ -119,5 +265,98 @@
       </div>
     </section>
   </div>
+
+  <!-- 登入帳號選擇模態框 -->
+  <div id="login-modal" class="modal" hidden>
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <div class="modal-head"><strong id="login-title">選擇測試帳號</strong><button id="close-login" class="close-button" type="button" aria-label="關閉登入">×</button></div>
+      <div id="account-list" style="display:flex;flex-direction:column;gap:8px">
+        <!-- 帳號清單將由 JavaScript 生成 -->
+      </div>
+      <div style="margin-top:12px;padding:12px;background:#f5f5f5;border-radius:6px;font-size:0.85rem;color:#666">
+        <strong>開發環境說明：</strong><br>
+        這是本地開發環境，使用 Mock Google OAuth。選擇任何帳號即可登入。
+      </div>
+    </section>
+  </div>
+
+  <!-- 服務條款接受模態框 -->
+  <div id="terms-modal" class="modal" hidden>
+    <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="terms-title">
+      <div class="modal-head"><strong id="terms-title">接受服務條款</strong><button id="close-terms" class="close-button" type="button" aria-label="關閉">×</button></div>
+      <div style="height:300px;overflow-y:auto;border:1px solid #ddd;border-radius:6px;padding:12px;margin-bottom:12px;font-size:0.9rem;background:#f9f9f9">
+        <h3>使用條款（Terms of Use）</h3>
+        <p><small>最後更新日期：2026 年 07 月 26 日</small></p>
+        
+        <h4>一、服務說明</h4>
+        <p>本網站由個人開發者提供，內容包含易經占卜、個人筆記、公開註記與社群互動功能。您使用本服務，即表示同意本聲明。若不同意，請停止使用。本服務目前為非營利用途。</p>
+        
+        <h4>二、帳號與使用</h4>
+        <p>本服務使用 Google 登入。您應妥善保管帳號，不得冒用他人身分。若有異常使用、濫用或違法情形，本服務得限制或停用帳號。</p>
+        
+        <h4>三、使用者內容</h4>
+        <p>您可建立占卜紀錄、筆記、公開註記、留言與回覆。您對自己建立之內容保有原權利。為提供功能，本服務得於必要範圍內儲存、處理、顯示、傳輸與備份您的內容。公開註記可被其他使用者閱讀、投票、收藏與留言。</p>
+        
+        <h4>四、禁止行為</h4>
+        <p>您不得發布或從事以下行為：違反中華民國法令之內容或行為；誹謗、侮辱、仇恨、騷擾、垃圾訊息或惡意洗票；入侵、破解、干擾系統或蒐集他人個資；侵害他人智慧財產權或其他權利。如有上述情形，本服務得下架內容或停權。</p>
+        
+        <h4>五、個人資料</h4>
+        <p>蒐集資料類別：Google 登入識別資訊、您主動提供之筆記與互動內容、系統操作紀錄。蒐集目的：帳號驗證、資料同步、功能提供、資安維護、違規處理。利用期間：帳號存續期間及法令要求之保存期間。利用地區與對象：為提供服務所需之系統與雲端服務供應商。您得依法請求停止利用或刪除個人資料（聯絡方式見第十條）。</p>
+        
+        <h4>六、資料儲存與刪除</h4>
+        <p>您可於設定中選擇部分資料僅存本機或同步雲端。您可將公開註記改為私人；系統將停止新公開顯示。基於備份、快取或法令義務，部分資料可能於合理期間後完成移除。</p>
+        
+        <h4>七、免責聲明</h4>
+        <p>本服務之占卜與註記內容僅供交流參考，不構成法律、醫療、投資或其他專業建議。使用者應自行判斷並承擔使用風險。因不可歸責事由（如網路中斷、第三方服務異常）致服務中斷時，本服務不負損害賠償責任。</p>
+        
+        <h4>八、條款調整</h4>
+        <p>本服務得因法令或營運需要更新本聲明，更新後公告於網站；重大變更時，得要求您重新同意。</p>
+        
+        <h4>九、準據法與管轄</h4>
+        <p>本聲明以中華民國（臺灣）法律為準據法。如有爭議，以臺灣臺北地方法院為第一審管轄法院。</p>
+        
+        <h4>十、聯絡方式</h4>
+        <p>若您要行使個資權利、檢舉內容或詢問條款，請聯絡：電子郵件：r13521608@caece.net；聯絡窗口：網站管理員（個資與內容檢舉窗口）</p>
+      </div>
+      
+      <div style="margin-bottom:12px;display:flex;align-items:flex-start;gap:8px">
+        <input type="checkbox" id="terms-agree-checkbox" style="margin-top:4px;cursor:pointer">
+        <label for="terms-agree-checkbox" style="font-size:0.9rem;cursor:pointer">
+          我已閱讀並同意周易讀本的服務條款
+        </label>
+      </div>
+      
+      <div class="modal-actions">
+        <button id="cancel-terms" class="secondary-button" type="button">取消</button>
+        <button id="accept-terms" class="submit-button" type="button" disabled>接受條款並登入</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- 討論串模態框 -->
+  <div id="thread-modal" class="modal" hidden>
+    <section class="modal-card thread-modal-card" role="dialog" aria-modal="true" aria-labelledby="thread-title">
+      <div class="modal-head" style="display:flex;align-items:center;justify-content:space-between">
+        <strong id="thread-title">評論討論</strong>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="thread-prev" class="icon-button" type="button" aria-label="前一個評論" style="font-size:1.2em">◀</button>
+          <span id="thread-counter" style="font-size:0.9rem;color:#888;min-width:40px;text-align:center">1/1</span>
+          <button id="thread-next" class="icon-button" type="button" aria-label="下一個評論" style="font-size:1.2em">▶</button>
+          <button id="close-thread" class="close-button" type="button" aria-label="關閉評論">×</button>
+        </div>
+      </div>
+      <div id="thread-content" style="overflow-y:auto;max-height:60vh;flex:1">
+        <!-- 討論串內容將由 JavaScript 生成 -->
+      </div>
+      <div id="thread-reply-form" style="padding:16px;border-top:1px solid #ddd;background:#fafafa">
+        <textarea id="thread-reply-text" rows="3" maxlength="500" placeholder="寫下你的回覆……" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-family:inherit"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+          <button id="thread-reply-cancel" class="secondary-button" type="button">取消</button>
+          <button id="thread-reply-submit" class="submit-button" type="button">回覆</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
 </body>
 </html>

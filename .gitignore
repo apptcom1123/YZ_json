@@ -1,6 +1,15 @@
 **/node_modules
 dist/
 .vercel/
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment
+.env
+.env.local
+.env.*.local
 
 # Local-only server and browser smoke tests
 /server.js
@@ -8,3 +17,11 @@ dist/
 *.log
 
 .vercel
+.vscode/
+.idea/
+.DS_Store
+
+# Development
+TODO.txt
+BACKEND_SETUP.md
+DEVELOPMENT.md
