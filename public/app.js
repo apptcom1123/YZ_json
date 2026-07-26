@@ -1215,6 +1215,9 @@ if(typeof authManager !== 'undefined'){
   });
 }
 
+let pendingTermsSessionToken = null;
+let pendingTermsUser = null;
+
 // ===== 登入流程 =====
 async function showLoginModal(){
   const modal=$('#login-modal');
@@ -1311,6 +1314,14 @@ async function handleGoogleOAuthCallback() {
       state
     });
 
+    if (result.requiresTermsAcceptance && result.sessionToken) {
+      // Google 首次登入：先接受條款，再完成登入
+      pendingTermsSessionToken = result.sessionToken;
+      pendingTermsUser = result.user || null;
+      showTermsModal(null, null, null);
+      return true;
+    }
+
     if (result.success) {
       // 保存會話 token
       api.saveSessionToken(result.sessionToken);
@@ -1371,15 +1382,28 @@ async function showTermsModal(accountId, state, nonce){
     try{
       acceptBtn.disabled=true;
       acceptBtn.textContent='處理中...';
-      
-      // 接受條款並完成登入
-      const result=await api.post('/auth/accept-terms-then-login', {
-        state,
-        nonce,
-        selectedAccount: accountId,
-        docVersion: '1.0',
-        agreedToAll: true
-      });
+
+      let result = null;
+
+      if (pendingTermsSessionToken) {
+        // Google OAuth：先使用暫時 session 接受條款，再視為登入完成
+        api.saveSessionToken(pendingTermsSessionToken);
+        await api.acceptTerms('1.0');
+        result = {
+          success: true,
+          sessionToken: pendingTermsSessionToken,
+          user: pendingTermsUser
+        };
+      } else {
+        // Mock OAuth：原流程
+        result = await api.post('/auth/accept-terms-then-login', {
+          state,
+          nonce,
+          selectedAccount: accountId,
+          docVersion: '1.0',
+          agreedToAll: true
+        });
+      }
       
       if (result.success) {
         // 保存會話 token
@@ -1397,6 +1421,15 @@ async function showTermsModal(accountId, state, nonce){
         sessionStorage.removeItem('oauth_state');
         sessionStorage.removeItem('oauth_nonce');
         sessionStorage.removeItem('oauth_return_to');
+
+        // 清理 Google 條款暫存狀態
+        pendingTermsSessionToken = null;
+        pendingTermsUser = null;
+
+        // 清除 URL query（code/state）
+        if (window.location.search.includes('code=')) {
+          window.history.replaceState({}, document.title, '/');
+        }
         
         // 登入成功
         modal.hidden=true;
@@ -1416,6 +1449,8 @@ async function showTermsModal(accountId, state, nonce){
   
   // 取消按鈕
   cancelBtn.onclick=()=>{
+    pendingTermsSessionToken = null;
+    pendingTermsUser = null;
     modal.hidden=true;
     $('#backdrop').hidden=true;
     // 顯示登入模態框
@@ -1424,6 +1459,8 @@ async function showTermsModal(accountId, state, nonce){
   
   // 關閉按鈕
   closeBtn.onclick=()=>{
+    pendingTermsSessionToken = null;
+    pendingTermsUser = null;
     modal.hidden=true;
     $('#backdrop').hidden=true;
   };

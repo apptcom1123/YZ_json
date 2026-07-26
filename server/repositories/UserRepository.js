@@ -165,12 +165,42 @@ export class UserRepository extends BaseRepository {
    * 記錄條款接受
    */
   async acceptTerms(userId, version, ipAddress = null, userAgent = null) {
-    // 刪除舊的同類型文檔記錄
+    if (this.isSupabase) {
+      await this.db
+        .from('legal_consents')
+        .delete()
+        .eq('user_id', userId)
+        .eq('doc_type', 'terms');
+
+      const { error: consentError } = await this.db
+        .from('legal_consents')
+        .insert({
+          user_id: userId,
+          doc_type: 'terms',
+          doc_version: version,
+          ip_address: ipAddress,
+          user_agent: userAgent
+        });
+      if (consentError) throw consentError;
+
+      const { error: settingsError } = await this.db
+        .from('user_settings')
+        .update({
+          terms_accepted: true,
+          accepted_terms_version: version,
+          terms_accepted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', userId);
+      if (settingsError) throw settingsError;
+      return;
+    }
+
+    // SQLite 路徑
     await this.db.run(`
       DELETE FROM legal_consents WHERE user_id = ? AND doc_type = 'terms'
     `, [userId]);
-    
-    // 插入新記錄
+
     const query = `
       INSERT INTO legal_consents (user_id, doc_type, doc_version, ip_address, user_agent)
       VALUES (?, 'terms', ?, ?, ?)
@@ -178,7 +208,6 @@ export class UserRepository extends BaseRepository {
 
     await this.db.run(query, [userId, version, ipAddress, userAgent]);
 
-    // 更新用戶設定
     await this.db.run(`
       UPDATE user_settings
       SET terms_accepted = 1, accepted_terms_version = ?, terms_accepted_at = CURRENT_TIMESTAMP

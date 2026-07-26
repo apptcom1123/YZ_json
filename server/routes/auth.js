@@ -72,6 +72,27 @@ router.post('/google/start', (req, res) => {
 });
 
 /**
+ * GET /api/auth/google/callback
+ * Google 會以 GET 回調。此路由將 code/state 轉回前端首頁，
+ * 由前端 handleGoogleOAuthCallback() 再以 POST 呼叫 API 完成登入。
+ */
+router.get('/google/callback', (req, res) => {
+  const { code, state, error, error_description } = req.query;
+
+  if (error) {
+    const err = encodeURIComponent(error_description || error);
+    return res.redirect(`/?oauth_error=${err}`);
+  }
+
+  if (!code || !state) {
+    return res.redirect('/?oauth_error=missing_code_or_state');
+  }
+
+  const redirectUrl = `/?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
+  return res.redirect(redirectUrl);
+});
+
+/**
  * POST /api/auth/google/callback
  * 處理 OAuth 回調（支持真實 Google OAuth 和 Mock OAuth）
  */
@@ -129,6 +150,24 @@ router.post('/google/callback', async (req, res) => {
         'ACCOUNT_DELETED': '您的帳號已被刪除',
         'TERMS_NOT_ACCEPTED': '需要接受服務條款'
       };
+
+      // 首次登入：允許前端拿到暫時 session 以完成條款同意
+      if (canLogin.reason === 'TERMS_NOT_ACCEPTED') {
+        const pendingSessionToken = generateSessionToken(user.id, profile.sub);
+        return res.json({
+          success: false,
+          requiresTermsAcceptance: true,
+          sessionToken: pendingSessionToken,
+          user: {
+            id: user.id,
+            email: user.email,
+            displayName: user.display_name,
+            avatarUrl: user.avatar_url
+          },
+          returnTo: validateReturnTo(returnTo)
+        });
+      }
+
       return res.status(403).json({
         error: canLogin.reason,
         message: reasonMessages[canLogin.reason] || canLogin.reason,
