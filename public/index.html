@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/community-styles.css">
   <script src="/vendor/supabase/supabase.js" defer></script>
+  <script src="/supabase-config.js" defer></script>
   <script src="/api-client.js" defer></script>
   <script src="/auth-manager.js" defer></script>
   <script src="/sync-service.js" type="module" defer></script>
@@ -24,7 +25,7 @@
       <button id="notes-button" class="icon-button" type="button" aria-controls="notes-panel" aria-label="個人中心">✦</button>
       <div id="auth-container" style="display:flex;gap:8px;align-items:center">
         <!-- 登入按鈕（未登入時顯示） -->
-        <button id="login-button" class="icon-button" type="button" aria-label="登入" style="display:none">●</button>
+        <button id="login-button" class="icon-button" type="button" aria-label="登入" style="display:none;width:34px;height:34px;font-size:1.1rem">●</button>
         <!-- 用戶菜單（已登入時顯示） -->
         <div id="user-menu" style="display:none;position:relative">
           <button id="user-menu-toggle" class="icon-button user-menu-logged-in" type="button" aria-haspopup="menu" aria-label="用戶選單">●</button>
