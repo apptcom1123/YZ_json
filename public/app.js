@@ -14,7 +14,11 @@ if(typeof authManager !== 'undefined'){
   authManager.init().then(()=>{
     // 初始化完成後更新 UI
     setTimeout(()=>updateAuthUI?.(), 100);
-  }).catch(err=>console.warn('認證初始化失敗:', err));
+  }).catch(err=>{
+    console.warn('認證初始化失敗:', err);
+    // Keep the real Google sign-in action reachable if the session check fails.
+    updateAuthUI?.();
+  });
 }
 
 initNavigation(); bindUI();
