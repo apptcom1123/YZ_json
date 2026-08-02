@@ -66,6 +66,15 @@ class APIClient {
       const responseData = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403 || responseData.error === 'IDENTITY_VERIFICATION_FAILED') {
+          throw new APIError(
+            'IDENTITY_VERIFICATION_FAILED',
+            responseData.error === 'IDENTITY_VERIFICATION_FAILED'
+              ? responseData.message
+              : '身分驗證失敗：非使用者本人、沒有此操作權限，或驗證已失效。',
+            response.status
+          );
+        }
         throw new APIError(
           responseData.error || 'UNKNOWN_ERROR',
           responseData.message || '未知錯誤',
@@ -143,6 +152,10 @@ class APIClient {
     return this.patch('/me/settings', { settings });
   }
 
+  updateProfile(profile) {
+    return this.patch('/me/profile', profile);
+  }
+
   /**
    * 接受使用條款
    */
@@ -200,6 +213,10 @@ class APIClient {
       thresholdPercent
     });
     return this.get(`/notes?${params}`);
+  }
+
+  getMyNotes() {
+    return this.get('/notes/mine');
   }
 
   /**
@@ -326,6 +343,13 @@ class APIClient {
    */
   deleteReply(noteId, replyId) {
     return this.delete(`/notes/${noteId}/replies/${replyId}`);
+  }
+
+  /**
+   * Vote for a reply. The API derives the voter from the verified session.
+   */
+  voteReply(noteId, replyId, voteType) {
+    return this.post(`/notes/${noteId}/replies/${replyId}/vote`, { voteType });
   }
 
   // ========== 通知 API ==========

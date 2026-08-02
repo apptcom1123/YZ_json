@@ -95,6 +95,41 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
 });
 
 /**
+ * POST /api/notes/:noteId/replies/:replyId/vote
+ * Vote for a reply. The authenticated Supabase user is always the voter.
+ */
+router.post('/:noteId/replies/:replyId/vote', requireAuth, async (req, res) => {
+  try {
+    const { voteType } = req.body;
+    if (!['up', 'down', 'none'].includes(voteType)) {
+      return res.status(400).json({
+        error: 'INVALID_VOTE_TYPE',
+        message: '投票類型無效'
+      });
+    }
+
+    const { reply: replyRepo } = req.app.locals.repositories;
+    const reply = await replyRepo.findById(req.params.replyId);
+    if (!reply || reply.note_id !== req.params.noteId || reply.status !== 'active') {
+      return res.status(404).json({
+        error: 'REPLY_NOT_FOUND',
+        message: '找不到可投票的留言'
+      });
+    }
+
+    await replyRepo.voteReply(reply.id, req.user.userId, voteType);
+    const updatedReply = await replyRepo.findById(reply.id);
+    res.json({ success: true, reply: updatedReply });
+  } catch (error) {
+    console.error('Vote reply error:', error);
+    res.status(500).json({
+      error: 'REPLY_VOTE_FAILED',
+      message: '無法更新留言投票'
+    });
+  }
+});
+
+/**
  * PATCH /api/notes/:noteId/replies/:replyId
  * 編輯回覆
  */

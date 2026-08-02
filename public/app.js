@@ -11,6 +11,7 @@ const reader=$('#reader'),list=$('#hexagram-list'),search=$('#search'),count=$('
 
 // 初始化認證系統（在其他 UI 初始化前進行）
 if(typeof authManager !== 'undefined'){
+  authManager.onAuthChange(()=>updateAuthUI?.());
   authManager.init().then(()=>{
     // 初始化完成後更新 UI
     setTimeout(()=>updateAuthUI?.(), 100);
@@ -84,7 +85,7 @@ function bindUI(){
     $('#login-button').onclick=async ()=>{
       if(typeof authManager !== 'undefined'){
         try{
-          await authManager.startLogin('/');
+          await beginTermsGate();
         }catch(err){
           console.error('登入啟動失敗:', err);
           alert('登入失敗，請重試');
@@ -144,9 +145,9 @@ function bindUI(){
         if(authManager.getCurrentUser){
           const user=authManager.getCurrentUser();
           if(user){
-            user.displayName=newNickname;
+            const result=await api.updateProfile({displayName:newNickname});
+            user.displayName=result.user.displayName;
             // 保存到 localStorage
-            localStorage.setItem('user',JSON.stringify(user));
             
             // 更新 UI
             $('#user-nickname').textContent=newNickname;
@@ -154,9 +155,6 @@ function bindUI(){
             toast('暱稱已更新');
             
             // 如果有 API 可用，也發送到後端
-            if(typeof api !== 'undefined' && api.updateProfile){
-              await api.updateProfile?.({displayName:newNickname});
-            }
           }
         }
       }catch(err){
@@ -284,9 +282,9 @@ async function submitAnnotation(event){
       note.comment=comment;
       note.visibility=visibility;
       // 如果改為 public，嘗試同步到 API
-      if(visibility==='public'&&typeof api!=='undefined'&&authManager.isLoggedIn){
+      if((visibility==='public'||note.serverId)&&typeof api!=='undefined'&&authManager.isLoggedIn){
         try{
-          await api.updateNote(note.id,{content:comment,visibility:'public'});
+          await api.updateNote(note.serverId||note.id,{content:comment,visibility});
         }catch(err){
           console.warn('無法同步公開註記到伺服器:',err);
         }
@@ -323,7 +321,7 @@ function applyHighlights(){
   const root=$('.annotatable');if(!root)return;
   
   // 加載私人註記
-  const privateEntries=state.notes.filter(n=>n.doc===root.dataset.doc).map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:null})).filter(x=>x.range);
+  const privateEntries=state.notes.filter(n=>n.doc===root.dataset.doc&&n.visibility!=='public').map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:Math.floor(n.start/5)})).filter(x=>x.range);
   
   // 先渲染私人氣泡
   requestAnimationFrame(()=>renderBubbles(privateEntries));
@@ -345,11 +343,11 @@ function applyHighlights(){
 async function loadPublicNotesForPage(articleId){
   try{
     // 讀取用戶設置的閾值
-    let thresholdPercent=60;// 默認值
+    let thresholdPercent=50;
     try{
       const settings=await api.getUserSettings();
       if(settings&&settings.settings){
-        thresholdPercent=settings.settings.noteVisibilityThresholdPercent||60;
+        thresholdPercent=settings.settings.noteVisibilityThresholdPercent ?? 50;
       }
     }catch(err){
       console.warn('無法讀取閾值設定，使用默認值');
@@ -384,7 +382,7 @@ async function loadPublicNotesForPage(articleId){
     }
     
     // 與私人註記一起渲染所有氣泡
-    const privateEntries=state.notes.filter(n=>n.doc===root.dataset.doc).map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:null})).filter(x=>x.range);
+    const privateEntries=state.notes.filter(n=>n.doc===root.dataset.doc&&n.visibility!=='public').map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:Math.floor(n.start/5)})).filter(x=>x.range);
     renderBubbles([...privateEntries,...publicEntries]);
     
     // 訂閱 Realtime 更新
@@ -417,13 +415,26 @@ function handleThresholdChange(){
   }
 }
 
+window.addEventListener('supabase-realtime-ready',()=>handleThresholdChange());
+
 function renderBubbles(entries){
   // 清除現有的所有氣泡
   document.querySelectorAll('.annotation-bubble').forEach(b => b.remove());
   
   // 分離私人和公開註記
-  const privateEntries=entries.filter(e=>e.type==='private');
+  let privateEntries=entries.filter(e=>e.type==='private');
   const publicEntries=entries.filter(e=>e.type==='public');
+
+  const privateClusterMap=new Map();
+  privateEntries.forEach(entry=>{
+    const clusterId=entry.clusterId ?? Math.floor(entry.note.start/5);
+    if(!privateClusterMap.has(clusterId))privateClusterMap.set(clusterId,[]);
+    privateClusterMap.get(clusterId).push(entry);
+  });
+  privateEntries=[...privateClusterMap.values()].map(cluster=>({
+    ...cluster[0],
+    note:{...cluster[0].note,clusterCount:cluster.length}
+  }));
   
   // 渲染私人氣泡（不聚合，直接顯示）
   privateEntries.forEach(({note,range},idx)=>{
@@ -433,7 +444,7 @@ function renderBubbles(entries){
     const bubble=document.createElement('button');
     bubble.className='annotation-bubble annotation-bubble-private';
     bubble.type='button';
-    bubble.textContent=idx+1;
+    bubble.textContent=note.clusterCount||idx+1;
     bubble.dataset.note=note.id;
     bubble.dataset.type='private';
     bubble.style.left=`${Math.min(innerWidth-32,rect.right+scrollX)}px`;
@@ -499,16 +510,44 @@ function bindBubble(bubble,note){
   bubble.addEventListener('dblclick',e=>{e.preventDefault();hideBubble();openAnnotationModal(note);});
 }
 
-function openThreadModal(cluster){
+async function hydrateThreadNote(note){
+  const response=await api.getNoteReplies(note.id);
+  note.replies=response.replies||[];
+  return note;
+}
+
+function orderedThreadCluster(cluster){
+  const byLikes=[...cluster].sort((a,b)=>(b.note.upvote_count||0)-(a.note.upvote_count||0)||new Date(b.note.created_at)-new Date(a.note.created_at));
+  const byNewest=[...cluster].sort((a,b)=>new Date(b.note.created_at)-new Date(a.note.created_at));
+  const ordered=[];
+  const add=item=>{if(item&&!ordered.includes(item))ordered.push(item);};
+  add(byLikes[0]); add(byLikes[1]); add(byNewest[0]); add(byLikes[2]); add(byNewest[1]); add(byLikes[3]); add(byNewest[2]);
+  byNewest.forEach(add);
+  return ordered;
+}
+
+function orderedReplies(replies, sortBy='best'){
+  return [...replies].sort((a,b)=>sortBy==='latest'
+    ? new Date(b.created_at)-new Date(a.created_at)
+    : (b.upvote_count||0)-(a.upvote_count||0)||new Date(b.created_at)-new Date(a.created_at));
+}
+
+async function openThreadModal(cluster){
   if(!authManager.isLoggedIn){
     toast('請先登入');
     return;
   }
   
-  window.threadData={cluster,currentIndex:0,sortBy:'newest'};
+  cluster.splice(0,cluster.length,...orderedThreadCluster(cluster));
+  window.threadData={cluster,currentIndex:0,replySort:'best'};
   const modal=$('#thread-modal');
   const backdrop=$('#backdrop');
   
+  try{
+    await hydrateThreadNote(cluster[0].note);
+  }catch(error){
+    console.warn('無法載入討論回覆:',error);
+  }
   renderThreadContent(cluster[0].note);
   modal.hidden=false;
   backdrop.hidden=false;
@@ -527,24 +566,28 @@ function openThreadModal(cluster){
     
     // 綁定排序按鈕事件
     const sortBtns=modal.querySelectorAll('.thread-sort-btn');
+    const latestReplySort=modal.querySelector('[data-sort="newest"]');
+    const bestReplySort=modal.querySelector('[data-sort="hot"]');
+    bestReplySort.textContent='最佳';
+    latestReplySort.style.borderColor=latestReplySort.style.color='#ddd';
+    bestReplySort.style.borderColor=bestReplySort.style.color='#963b2e';
     sortBtns.forEach(btn=>{
       btn.onclick=()=>{
         const sortType=btn.dataset.sort;
-        window.threadData.sortBy=sortType;
+        window.threadData.replySort=sortType==='hot'?'best':'latest';
         
         // 更新按鈕樣式
         sortBtns.forEach(b=>b.style.borderColor=b.style.color='#ddd');
         btn.style.borderColor=btn.style.color='#963b2e';
         
         // 重新排序並重新渲染
-        if(sortType==='hot'){
+        if(false){
           cluster.sort((a,b)=>(b.note.score||0)-(a.note.score||0));
-        }else{
+        }else if(false){
           cluster.sort((a,b)=>new Date(b.note.created_at)-new Date(a.note.created_at));
         }
         
-        window.threadData.currentIndex=0;
-        renderThreadContent(cluster[0].note);
+        renderThreadContent(cluster[window.threadData.currentIndex].note);
       };
     });
   }
@@ -577,14 +620,7 @@ function openThreadModal(cluster){
     
     try{
       const currentNote=cluster[window.threadData.currentIndex].note;
-      const response=await fetch('/api/notes/'+currentNote.id+'/replies',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+api.sessionToken},
-        body:JSON.stringify({content:text})
-      });
-      
-      if(!response.ok)throw new Error(await response.text());
-      const result=await response.json();
+      const result=await api.addReply(currentNote.id,text);
       
       if(!currentNote.replies)currentNote.replies=[];
       if(result.reply){
@@ -630,7 +666,7 @@ function renderThreadContent(note){
   `;
   
   // 回覆列表
-  const repliesHTML=(note.replies||[]).map((r,i)=>`
+  const repliesHTML=orderedReplies(note.replies||[],window.threadData?.replySort).map((r,i)=>`
     <div style="padding:12px;padding-left:32px;border-bottom:1px solid #eee;background:#fafafa">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
@@ -638,8 +674,8 @@ function renderThreadContent(note){
           <span style="color:#999;font-size:0.85rem"> · ${new Date(r.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
-          <button class="thread-vote" data-note-id="${r.id}" data-vote="up" style="background:none;border:none;cursor:pointer">👍 ${r.upvote_count||0}</button>
-          <button class="thread-vote" data-note-id="${r.id}" data-vote="down" style="background:none;border:none;cursor:pointer">👎 ${r.downvote_count||0}</button>
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" style="background:none;border:none;cursor:pointer">👍 ${r.upvote_count||0}</button>
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" style="background:none;border:none;cursor:pointer">👎 ${r.downvote_count||0}</button>
         </div>
       </div>
       <p style="color:#666;line-height:1.5;margin:8px 0">${esc(r.content)}</p>
@@ -647,6 +683,17 @@ function renderThreadContent(note){
   `).join('');
   
   container.innerHTML=mainHTML+repliesHTML;
+  if(typeof realtimeClient !== 'undefined'){
+    realtimeClient.subscribeToReplies(note.id,async()=>{
+      try{
+        const response=await api.getNoteReplies(note.id);
+        note.replies=response.replies||[];
+        renderThreadContent(note);
+      }catch(err){
+        console.warn('無法同步最新回覆:',err);
+      }
+    });
+  }
   
   // 綁定投票事件
   container.querySelectorAll('.thread-vote').forEach(btn=>{
@@ -661,14 +708,7 @@ function renderThreadContent(note){
       const voteType=btn.dataset.vote;
       
       try{
-        const response=await fetch('/api/notes/'+noteId+'/vote',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+api.sessionToken},
-          body:JSON.stringify({voteType:voteType})
-        });
-        
-        if(!response.ok)throw new Error(await response.text());
-        const result=await response.json();
+        const result=await api.voteNote(noteId,voteType);
         
         // 更新 note 對象的投票計數
         Object.assign(note, result.note);
@@ -694,6 +734,26 @@ function renderThreadContent(note){
       }
     };
   });
+
+  container.querySelectorAll('.thread-reply-vote').forEach(btn=>{
+    btn.onclick=async(e)=>{
+      e.preventDefault();
+      if(!api.sessionToken){
+        toast('請先登入');
+        return;
+      }
+
+      try{
+        const result=await api.voteReply(note.id,btn.dataset.replyId,btn.dataset.vote);
+        const reply=(note.replies||[]).find(item=>item.id===btn.dataset.replyId);
+        if(reply&&result.reply)Object.assign(reply,result.reply);
+        renderThreadContent(note);
+      }catch(err){
+        console.error('留言投票失敗:',err);
+        toast(err.message||'留言投票失敗');
+      }
+    };
+  });
   
   // 綁定收藏事件
   container.querySelectorAll('.thread-favorite').forEach(btn=>{
@@ -707,13 +767,7 @@ function renderThreadContent(note){
       const noteId=btn.dataset.noteId;
       
       try{
-        const response=await fetch('/api/notes/'+noteId+'/favorite',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+api.sessionToken}
-        });
-        
-        if(!response.ok)throw new Error(await response.text());
-        const result=await response.json();
+        const result=await api.toggleFavorite(noteId);
         
         // 更新 note 對象的收藏計數
         Object.assign(note, result.note);
@@ -1024,9 +1078,25 @@ function showDivinationResult(result){
   `;
 }
 
-function saveDivinationResult(){
+async function saveDivinationResult(){
   if(!state.currentDivinationResult)return;
-  state.divinations.push(state.currentDivinationResult);
+  const record=state.currentDivinationResult;
+  if(authManager.isLoggedIn){
+    try{
+      const settingsResponse=await api.getUserSettings();
+      if(settingsResponse.settings?.saveDivinationToCloud){
+        const response=await api.createDivination(
+          record.result.originalHexagram.id,
+          record.question,
+          record.result
+        );
+        record.serverId=response.record.id;
+      }
+    }catch(error){
+      console.warn('無法儲存占卜至雲端:',error);
+    }
+  }
+  state.divinations.push(record);
   saveDivinations();
   toast('占卜結果已儲存');
   closeDivinationResult();
@@ -1486,7 +1556,7 @@ async function initializeSettings(){
     // 設置儲存設定複選框
     const saveNotesEl=$('#settings-save-notes');
     if(saveNotesEl){
-      saveNotesEl.checked=settings.saveNotesToCloud;
+      saveNotesEl.checked=Boolean(settings.saveNotesToCloud);
       saveNotesEl.onchange=async e=>{
         await updateSetting('saveNotesToCloud',e.target.checked);
       };
@@ -1494,7 +1564,7 @@ async function initializeSettings(){
     
     const saveDivinationsEl=$('#settings-save-divinations');
     if(saveDivinationsEl){
-      saveDivinationsEl.checked=settings.saveDivinationToCloud;
+      saveDivinationsEl.checked=Boolean(settings.saveDivinationToCloud);
       saveDivinationsEl.onchange=async e=>{
         await updateSetting('saveDivinationToCloud',e.target.checked);
       };
@@ -1502,7 +1572,7 @@ async function initializeSettings(){
     
     const allowPublicNotesEl=$('#settings-public-notes');
     if(allowPublicNotesEl){
-      allowPublicNotesEl.checked=settings.allowPublicNotes;
+      allowPublicNotesEl.checked=Boolean(settings.allowPublicNotes);
       allowPublicNotesEl.onchange=async e=>{
         await updateSetting('allowPublicNotes',e.target.checked);
       };
@@ -1512,7 +1582,7 @@ async function initializeSettings(){
     const thresholdEl=$('#settings-threshold');
     const thresholdValueEl=$('#settings-threshold-value');
     if(thresholdEl){
-      thresholdEl.value=settings.noteVisibilityThresholdPercent||50;
+      thresholdEl.value=settings.noteVisibilityThresholdPercent ?? 50;
       thresholdEl.oninput=e=>{
         thresholdValueEl.textContent=e.target.value+'%';
       };
@@ -1526,7 +1596,7 @@ async function initializeSettings(){
     // 通知設定
     const notifyReplyEl=$('#settings-notify-replies');
     if(notifyReplyEl){
-      notifyReplyEl.checked=settings.notifyOnReply;
+      notifyReplyEl.checked=settings.notifyOnReply !== false;
       notifyReplyEl.onchange=async e=>{
         await updateSetting('notifyOnReply',e.target.checked);
       };

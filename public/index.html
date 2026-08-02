@@ -8,14 +8,19 @@
   <title>周易讀本</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/community-styles.css">
+  <style>
+    ::highlight(public-notes){background:#f2b56b;text-decoration:underline;text-decoration-color:#c66d21;text-decoration-thickness:2px}
+    .annotation-bubble-public{border-color:#c66d21;background:#df862f}
+  </style>
   <script src="/vendor/supabase/supabase.js" defer></script>
   <script src="/supabase-config.js" defer></script>
   <script src="/api-client.js" defer></script>
   <script src="/auth-manager.js" defer></script>
   <script src="/sync-service.js" type="module" defer></script>
   <script src="/realtime-client.js" defer></script>
+  <script src="/terms-gate.js" defer></script>
   <script src="/app.js" defer></script>
-  <script src="/personal-center.js" defer></script>
+  <script src="/cloud-data-sync.js" defer></script>
 </head>
 <body>
   <header class="topbar">

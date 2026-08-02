@@ -43,6 +43,19 @@ export class UserRepository extends BaseRepository {
     return this.getUserWithSettings(userId);
   }
 
+  async updateProfile(userId, { displayName }) {
+    const name = typeof displayName === 'string' ? displayName.trim() : '';
+    if (!name || name.length > 50) throw new Error('INVALID_DISPLAY_NAME');
+    const { data, error } = await this.db
+      .from('users')
+      .update({ display_name: name, public_display_name: name, updated_at: new Date().toISOString() })
+      .eq('id', userId)
+      .select('id, email, display_name, public_display_name, avatar_url, role')
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
   async hasAcceptedTerms(userId, version) {
     const { data, error } = await this.db.from('legal_consents').select('*').eq('user_id', userId).eq('doc_type', 'terms').eq('doc_version', version).maybeSingle();
     if (error) throw error;

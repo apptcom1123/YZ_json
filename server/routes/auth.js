@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireSession } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -11,14 +11,15 @@ router.get('/config', (req, res) => {
   });
 });
 
-router.get('/status', requireAuth, async (req, res) => {
+router.get('/status', requireSession, async (req, res) => {
   const user = req.userInfo || await req.app.locals.repositories.user.findById(req.user.userId);
   if (!user) return res.status(404).json({ error: 'USER_NOT_FOUND', message: '找不到使用者資料' });
 
   const login = await req.app.locals.repositories.user.canLogin(user.id);
   res.json({
-    loggedIn: true,
+    loggedIn: login.allowed,
     loginBlocked: !login.allowed,
+    requiresTerms: !login.allowed && login.reason === 'TERMS_NOT_ACCEPTED',
     blockReason: login.reason || null,
     user: {
       id: user.id,
@@ -30,6 +31,6 @@ router.get('/status', requireAuth, async (req, res) => {
   });
 });
 
-router.post('/logout', requireAuth, (req, res) => res.json({ success: true }));
+router.post('/logout', requireSession, (req, res) => res.json({ success: true }));
 
 export default router;

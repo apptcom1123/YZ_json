@@ -1,5 +1,5 @@
 class AuthManager {
-  constructor() { this.user = null; this.isLoggedIn = false; this.listeners = []; this.client = null; }
+  constructor() { this.user = null; this.isLoggedIn = false; this.requiresTerms = false; this.listeners = []; this.client = null; }
 
   async init() {
     const config = window.__SUPABASE_CONFIG__;
@@ -14,6 +14,7 @@ class AuthManager {
     this.client.auth.onAuthStateChange((_event, session) => {
       if (session?.access_token) api.saveSessionToken(session.access_token);
       if (!session) api.clearSessionToken();
+      window.setTimeout(() => this.checkAuthStatus(), 0);
     });
     const { data: { session } } = await this.client.auth.getSession();
     if (session?.access_token) api.saveSessionToken(session.access_token);
@@ -39,10 +40,13 @@ class AuthManager {
   async checkAuthStatus() {
     try {
       const response = await api.getAuthStatus();
-      this.user = response.user; this.isLoggedIn = Boolean(response.loggedIn);
+      const browserAccepted = localStorage.getItem('iching_terms_version') === '2026-07-26';
+      this.user = response.user;
+      this.requiresTerms = Boolean(response.requiresTerms) || !browserAccepted;
+      this.isLoggedIn = Boolean(response.loggedIn) && browserAccepted;
       this.notifyListeners(); return response;
     } catch (_) {
-      this.user = null; this.isLoggedIn = false; this.notifyListeners(); return { loggedIn: false };
+      this.user = null; this.isLoggedIn = false; this.requiresTerms = false; this.notifyListeners(); return { loggedIn: false };
     }
   }
 

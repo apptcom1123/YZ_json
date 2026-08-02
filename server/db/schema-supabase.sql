@@ -21,10 +21,10 @@ CREATE TABLE IF NOT EXISTS users (
 -- User Settings table
 CREATE TABLE IF NOT EXISTS user_settings (
   user_id TEXT PRIMARY KEY,
-  save_notes_to_cloud BOOLEAN DEFAULT true,
+  save_notes_to_cloud BOOLEAN DEFAULT false,
   save_divination_to_cloud BOOLEAN DEFAULT false,
   allow_public_notes BOOLEAN DEFAULT false,
-  note_visibility_threshold_percent REAL DEFAULT 60.0,
+  note_visibility_threshold_percent REAL DEFAULT 50.0,
   language TEXT DEFAULT 'zh-TW',
   timezone TEXT DEFAULT 'Asia/Taipei',
   notify_on_reply BOOLEAN DEFAULT true,
@@ -129,6 +129,20 @@ CREATE TABLE IF NOT EXISTS note_replies (
 CREATE INDEX IF NOT EXISTS idx_note_replies_note ON note_replies(note_id);
 CREATE INDEX IF NOT EXISTS idx_note_replies_parent ON note_replies(parent_reply_id);
 CREATE INDEX IF NOT EXISTS idx_note_replies_author ON note_replies(author_id);
+
+-- Reply Votes table
+CREATE TABLE IF NOT EXISTS reply_votes (
+  reply_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  vote_type TEXT NOT NULL CHECK(vote_type IN ('up', 'down')),
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (reply_id, user_id),
+  FOREIGN KEY (reply_id) REFERENCES note_replies(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_reply_votes_reply ON reply_votes(reply_id);
 
 -- Legal Consents table
 CREATE TABLE IF NOT EXISTS legal_consents (

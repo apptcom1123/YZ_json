@@ -62,7 +62,8 @@ export class NoteReplyRepository extends BaseRepository {
         .from('note_replies')
         .select('*, users(public_display_name)')
         .eq('note_id', noteId)
-        .order('created_at', { ascending: true });
+        .order('upvote_count', { ascending: false })
+        .order('created_at', { ascending: false });
 
       if (!includeDeleted) query = query.eq('status', 'active');
 
@@ -185,6 +186,42 @@ export class NoteReplyRepository extends BaseRepository {
    * 為回覆投票
    */
   async voteReply(replyId, userId, voteType) {
+    if (this.isSupabase) {
+      const { data: existing, error: findError } = await this.db
+        .from('reply_votes')
+        .select('vote_type')
+        .eq('reply_id', replyId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (findError) throw findError;
+
+      if (voteType === 'none' || existing?.vote_type === voteType) {
+        if (existing) {
+          const { error } = await this.db
+            .from('reply_votes')
+            .delete()
+            .eq('reply_id', replyId)
+            .eq('user_id', userId);
+          if (error) throw error;
+        }
+      } else if (existing) {
+        const { error } = await this.db
+          .from('reply_votes')
+          .update({ vote_type: voteType, updated_at: new Date().toISOString() })
+          .eq('reply_id', replyId)
+          .eq('user_id', userId);
+        if (error) throw error;
+      } else {
+        const { error } = await this.db
+          .from('reply_votes')
+          .insert({ reply_id: replyId, user_id: userId, vote_type: voteType });
+        if (error) throw error;
+      }
+
+      await this.updateReplyScore(replyId);
+      return;
+    }
+
     const query = `
       INSERT OR REPLACE INTO note_votes (note_id, user_id, vote_type)
       VALUES ((SELECT note_id FROM note_replies WHERE id = ?), ?, ?)
@@ -210,9 +247,27 @@ export class NoteReplyRepository extends BaseRepository {
    */
   async updateReplyScore(replyId) {
     if (this.isSupabase) {
+      const { count: upvoteCount, error: upvoteError } = await this.db
+        .from('reply_votes')
+        .select('*', { count: 'exact', head: true })
+        .eq('reply_id', replyId)
+        .eq('vote_type', 'up');
+      if (upvoteError) throw upvoteError;
+
+      const { count: downvoteCount, error: downvoteError } = await this.db
+        .from('reply_votes')
+        .select('*', { count: 'exact', head: true })
+        .eq('reply_id', replyId)
+        .eq('vote_type', 'down');
+      if (downvoteError) throw downvoteError;
+
       const { error } = await this.db
         .from('note_replies')
-        .update({ upvote_count: 0, downvote_count: 0 })
+        .update({
+          upvote_count: upvoteCount || 0,
+          downvote_count: downvoteCount || 0,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', replyId);
       if (error) throw error;
       return;

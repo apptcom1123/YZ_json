@@ -58,6 +58,16 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
+router.get('/mine', requireAuth, async (req, res) => {
+  try {
+    const notes = await req.app.locals.repositories.note.getUserPrivateNotes(req.user.userId);
+    res.json({ notes });
+  } catch (error) {
+    console.error('Get own notes error:', error);
+    res.status(500).json({ error: 'FETCH_OWN_NOTES_FAILED' });
+  }
+});
+
 /**
  * POST /api/notes
  * 創建新註記
@@ -71,7 +81,8 @@ router.post('/', requireAuth, async (req, res) => {
       anchorOffsetStart,
       anchorOffsetEnd,
       content,
-      visibility = 'private'
+      visibility = 'private',
+      localUuid = null
     } = req.body;
 
     // 驗證必填字段
@@ -119,7 +130,8 @@ router.post('/', requireAuth, async (req, res) => {
       anchorOffsetStart,
       anchorOffsetEnd,
       content,
-      visibility
+      visibility,
+      localUuid
     });
 
     const note = await noteRepo.findById(noteId);

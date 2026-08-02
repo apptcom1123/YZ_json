@@ -3,9 +3,10 @@
  */
 
 import express from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireSession } from '../middleware/auth.js';
 
 const router = express.Router();
+const toBoolean = (value) => value === true || value === 1;
 
 /**
  * GET /api/me/settings
@@ -33,14 +34,14 @@ router.get('/settings', requireAuth, async (req, res) => {
         role: userWithSettings.role
       },
       settings: {
-        saveNotesToCloud: userWithSettings.save_notes_to_cloud === 1,
-        saveDivinationToCloud: userWithSettings.save_divination_to_cloud === 1,
-        allowPublicNotes: userWithSettings.allow_public_notes === 1,
+        saveNotesToCloud: toBoolean(userWithSettings.save_notes_to_cloud),
+        saveDivinationToCloud: toBoolean(userWithSettings.save_divination_to_cloud),
+        allowPublicNotes: toBoolean(userWithSettings.allow_public_notes),
         noteVisibilityThresholdPercent: userWithSettings.note_visibility_threshold_percent,
         language: userWithSettings.language,
         timezone: userWithSettings.timezone,
-        notifyOnReply: userWithSettings.notify_on_reply === 1,
-        termsAccepted: userWithSettings.terms_accepted === 1,
+        notifyOnReply: toBoolean(userWithSettings.notify_on_reply),
+        termsAccepted: toBoolean(userWithSettings.terms_accepted),
         acceptedTermsVersion: userWithSettings.accepted_terms_version,
         termsAcceptedAt: userWithSettings.terms_accepted_at
       }
@@ -90,13 +91,13 @@ router.patch('/settings', requireAuth, async (req, res) => {
     res.json({
       success: true,
       settings: {
-        saveNotesToCloud: updated.save_notes_to_cloud === 1,
-        saveDivinationToCloud: updated.save_divination_to_cloud === 1,
-        allowPublicNotes: updated.allow_public_notes === 1,
+        saveNotesToCloud: toBoolean(updated.save_notes_to_cloud),
+        saveDivinationToCloud: toBoolean(updated.save_divination_to_cloud),
+        allowPublicNotes: toBoolean(updated.allow_public_notes),
         noteVisibilityThresholdPercent: updated.note_visibility_threshold_percent,
         language: updated.language,
         timezone: updated.timezone,
-        notifyOnReply: updated.notify_on_reply === 1
+        notifyOnReply: toBoolean(updated.notify_on_reply)
       }
     });
   } catch (error) {
@@ -108,11 +109,24 @@ router.patch('/settings', requireAuth, async (req, res) => {
   }
 });
 
+router.patch('/profile', requireAuth, async (req, res) => {
+  try {
+    const profile = await req.app.locals.repositories.user.updateProfile(req.user.userId, req.body || {});
+    res.json({ success: true, user: {
+      id: profile.id, email: profile.email, displayName: profile.display_name,
+      publicDisplayName: profile.public_display_name, avatarUrl: profile.avatar_url, role: profile.role
+    }});
+  } catch (error) {
+    res.status(error.message === 'INVALID_DISPLAY_NAME' ? 400 : 500)
+      .json({ error: error.message || 'UPDATE_PROFILE_FAILED' });
+  }
+});
+
 /**
  * POST /api/me/terms/accept
  * 接受使用條款
  */
-router.post('/terms/accept', requireAuth, async (req, res) => {
+router.post('/terms/accept', requireSession, async (req, res) => {
   try {
     const { docType = 'terms', docVersion } = req.body;
 
@@ -148,7 +162,7 @@ router.post('/terms/accept', requireAuth, async (req, res) => {
  * GET /api/me/terms/status
  * 獲取條款接受狀態
  */
-router.get('/terms/status', requireAuth, async (req, res) => {
+router.get('/terms/status', requireSession, async (req, res) => {
   try {
     const { user: userRepo } = req.app.locals.repositories;
     let settings;
@@ -208,7 +222,7 @@ router.patch('/settings/notifications', requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      notifyOnReply: updated.notify_on_reply === 1
+      notifyOnReply: toBoolean(updated.notify_on_reply)
     });
   } catch (error) {
     console.error('Update notification settings error:', error);
@@ -260,7 +274,10 @@ router.post('/data/delete', requireAuth, async (req, res) => {
         userRepo.db.from('notes').update({ deleted_at: deletedAt, status: 'deleted' }).eq('author_id', userId).is('deleted_at', null),
         userRepo.db.from('note_favorites').delete().eq('user_id', userId),
         userRepo.db.from('note_votes').delete().eq('user_id', userId),
-        userRepo.db.from('note_replies').update({ status: 'deleted', updated_at: deletedAt }).eq('author_id', userId)
+        userRepo.db.from('reply_votes').delete().eq('user_id', userId),
+        userRepo.db.from('note_replies').update({ status: 'deleted', updated_at: deletedAt }).eq('author_id', userId),
+        userRepo.db.from('notifications').delete().eq('user_id', userId),
+        userRepo.db.from('user_stats').update({ total_replies_received: 0, unread_notifications_count: 0, updated_at: deletedAt }).eq('user_id', userId)
       ];
 
       for (const operation of operations) {
@@ -360,6 +377,9 @@ router.post('/account/delete', requireAuth, async (req, res) => {
 
     // 軟刪除用戶
     await userRepo.softDelete(req.user.userId);
+
+    const { error: authDeleteError } = await req.app.locals.supabaseClient.auth.admin.deleteUser(req.user.userId);
+    if (authDeleteError) throw authDeleteError;
 
     res.json({
       success: true,
