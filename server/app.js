@@ -19,8 +19,19 @@ import notificationsRoutes from './routes/notifications.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function readSingleEnvValue(name) {
+  const values = String(process.env[name] || '').trim().split(/\s+/).filter(Boolean);
+  const uniqueValues = [...new Set(values)];
+  if (uniqueValues.length > 1) {
+    throw new Error(`${name} must contain exactly one value.`);
+  }
+  return uniqueValues[0] || '';
+}
+
 export async function createApp({ serveStatic = false } = {}) {
-  const { SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_KEY } = process.env;
+  const SUPABASE_URL = readSingleEnvValue('SUPABASE_URL');
+  const SUPABASE_KEY = readSingleEnvValue('SUPABASE_KEY');
+  const SUPABASE_SERVICE_KEY = readSingleEnvValue('SUPABASE_SERVICE_KEY');
   if (!SUPABASE_URL || !SUPABASE_KEY || !SUPABASE_SERVICE_KEY) {
     throw new Error('SUPABASE_URL, SUPABASE_KEY, and SUPABASE_SERVICE_KEY are required.');
   }

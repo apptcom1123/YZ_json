@@ -61,7 +61,7 @@ class AuthManager {
     this.user = null;
     this.isLoggedIn = false;
     localStorage.removeItem('iching_authenticated_user_id');
-    sessionStorage.removeItem(window.ICHING_TERMS_LOGIN_INTENT_KEY || 'iching_terms_login_intent');
+    this.clearTermsLoginIntent();
     api.clearSessionToken();
     this.notifyListeners();
   }
@@ -91,7 +91,7 @@ class AuthManager {
     try {
       const termsVersion = window.ICHING_TERMS_VERSION || '2026-07-26';
       const intentKey = window.ICHING_TERMS_LOGIN_INTENT_KEY || 'iching_terms_login_intent';
-      const hasLoginIntent = sessionStorage.getItem(intentKey) === termsVersion;
+      const hasLoginIntent = this.hasTermsLoginIntent(intentKey, termsVersion);
       response = await api.getAuthStatus();
 
       if (response.requiresTerms && response.user) {
@@ -115,7 +115,7 @@ class AuthManager {
       if (this.isLoggedIn) {
         localStorage.setItem('iching_terms_version', termsVersion);
         localStorage.setItem('iching_authenticated_user_id', this.user.id);
-        sessionStorage.removeItem(intentKey);
+        this.clearTermsLoginIntent(intentKey);
       }
       this.notifyListeners(); return response;
     } catch (error) {
@@ -130,11 +130,28 @@ class AuthManager {
 
   async rejectUnconfirmedSession() {
     if (this.client) await this.client.auth.signOut();
+    this.clearTermsLoginIntent();
     api.clearSessionToken();
     this.user = null;
     this.isLoggedIn = false;
     this.requiresTerms = false;
     this.notifyListeners();
+  }
+
+  hasTermsLoginIntent(intentKey, termsVersion) {
+    if (sessionStorage.getItem(intentKey) === termsVersion) return true;
+    try {
+      const intent = JSON.parse(localStorage.getItem(intentKey) || 'null');
+      const age = Date.now() - Number(intent?.createdAt || 0);
+      return intent?.version === termsVersion && age >= 0 && age <= 15 * 60 * 1000;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  clearTermsLoginIntent(intentKey = window.ICHING_TERMS_LOGIN_INTENT_KEY || 'iching_terms_login_intent') {
+    sessionStorage.removeItem(intentKey);
+    localStorage.removeItem(intentKey);
   }
 
   onAuthChange(callback) { this.listeners.push(callback); }

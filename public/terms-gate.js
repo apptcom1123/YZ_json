@@ -17,6 +17,7 @@ function beginTermsGate({ afterOAuth = false } = {}) {
 
   const close = async ({ signOut = false } = {}) => {
     sessionStorage.removeItem(TERMS_LOGIN_INTENT_KEY);
+    localStorage.removeItem(TERMS_LOGIN_INTENT_KEY);
     modal.hidden = true;
     if (backdrop) backdrop.hidden = true;
     if (signOut) await authManager.logout();
@@ -43,12 +44,18 @@ function beginTermsGate({ afterOAuth = false } = {}) {
       } else {
         localStorage.setItem(TERMS_STORAGE_KEY, TERMS_VERSION);
         await close();
-        sessionStorage.setItem(TERMS_LOGIN_INTENT_KEY, TERMS_VERSION);
+        localStorage.setItem(TERMS_LOGIN_INTENT_KEY, JSON.stringify({
+          version: TERMS_VERSION,
+          createdAt: Date.now()
+        }));
         await authManager.startLogin('/');
       }
     } catch (error) {
       console.error('Terms acceptance failed:', error);
-      if (!afterOAuth) sessionStorage.removeItem(TERMS_LOGIN_INTENT_KEY);
+      if (!afterOAuth) {
+        sessionStorage.removeItem(TERMS_LOGIN_INTENT_KEY);
+        localStorage.removeItem(TERMS_LOGIN_INTENT_KEY);
+      }
       acceptButton.disabled = false;
       acceptButton.textContent = idleText;
       alert('無法記錄條款同意，請重試。');
