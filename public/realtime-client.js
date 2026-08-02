@@ -44,11 +44,28 @@ class RealtimeClient {
   }
 
   subscribeToVotes(noteId, onUpdate) {
-    return this.subscribeToNoteChanges('votes', noteId, onUpdate);
+    return this.subscribeToRelatedTable('votes', 'note_votes', 'note_id', noteId, onUpdate);
   }
 
   subscribeToFavorites(noteId, onUpdate) {
-    return this.subscribeToNoteChanges('favorites', noteId, onUpdate);
+    return this.subscribeToRelatedTable('favorites', 'note_favorites', 'note_id', noteId, onUpdate);
+  }
+
+  subscribeToReplyVotes(replyId, onUpdate) {
+    return this.subscribeToRelatedTable('reply-votes', 'reply_votes', 'reply_id', replyId, onUpdate);
+  }
+
+  subscribeToRelatedTable(type, table, column, value, onUpdate) {
+    const id = `${type}:${value}`;
+    if (!this.isEnabled || this.subscriptions.has(id)) return id;
+    const channel = this.client
+      .channel(id)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table, filter: `${column}=eq.${value}`
+      }, payload => onUpdate({ event: payload.eventType, data: payload.new || payload.old }))
+      .subscribe(status => this.setStatus(id, status));
+    this.subscriptions.set(id, channel);
+    return id;
   }
 
   subscribeToNoteChanges(type, noteId, onUpdate) {

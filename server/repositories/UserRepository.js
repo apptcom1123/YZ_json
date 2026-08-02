@@ -1,5 +1,7 @@
 import { BaseRepository } from './BaseRepository.js';
 
+const CURRENT_TERMS_VERSION = '2026-07-26';
+
 export class UserRepository extends BaseRepository {
   constructor(db) { super(db, 'users'); }
   async findByGoogleSub(googleSub) { return this.findOne({ google_sub: googleSub }); }
@@ -93,9 +95,11 @@ export class UserRepository extends BaseRepository {
     const user = await this.findById(userId);
     if (!user) return { allowed: false, reason: 'USER_NOT_FOUND' };
     if (!user.is_active) return { allowed: false, reason: 'ACCOUNT_DISABLED', disabledReason: user.disabled_reason };
-    const { data, error } = await this.db.from('user_settings').select('terms_accepted').eq('user_id', userId).maybeSingle();
+    const { data, error } = await this.db.from('user_settings').select('terms_accepted, accepted_terms_version').eq('user_id', userId).maybeSingle();
     if (error) throw error;
-    return data?.terms_accepted ? { allowed: true } : { allowed: false, reason: 'TERMS_NOT_ACCEPTED' };
+    return data?.terms_accepted && data?.accepted_terms_version === CURRENT_TERMS_VERSION
+      ? { allowed: true }
+      : { allowed: false, reason: 'TERMS_NOT_ACCEPTED' };
   }
 
   async getUserStats(userId) {

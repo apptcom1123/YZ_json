@@ -11,7 +11,17 @@ router.get('/config', (req, res) => {
   });
 });
 
-router.get('/status', requireSession, async (req, res) => {
+router.get('/status', async (req, res) => {
+  if (!req.user) {
+    return res.json({
+      loggedIn: false,
+      loginBlocked: false,
+      requiresTerms: false,
+      blockReason: null,
+      user: null
+    });
+  }
+
   const user = req.userInfo || await req.app.locals.repositories.user.findById(req.user.userId);
   if (!user) return res.status(404).json({ error: 'USER_NOT_FOUND', message: '找不到使用者資料' });
 

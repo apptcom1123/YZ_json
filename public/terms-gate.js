@@ -1,15 +1,12 @@
 const TERMS_VERSION = '2026-07-26';
 const TERMS_STORAGE_KEY = 'iching_terms_version';
+window.ICHING_TERMS_VERSION = TERMS_VERSION;
 
 function hasAcceptedTermsInBrowser() {
   return localStorage.getItem(TERMS_STORAGE_KEY) === TERMS_VERSION;
 }
 
 function beginTermsGate({ afterOAuth = false } = {}) {
-  if (!afterOAuth && hasAcceptedTermsInBrowser()) {
-    return authManager.startLogin('/');
-  }
-
   const modal = document.getElementById('terms-modal');
   const backdrop = document.getElementById('backdrop');
   const checkbox = document.getElementById('terms-agree-checkbox');
@@ -33,12 +30,13 @@ function beginTermsGate({ afterOAuth = false } = {}) {
     if (!checkbox.checked) return;
     acceptButton.disabled = true;
     try {
-      localStorage.setItem(TERMS_STORAGE_KEY, TERMS_VERSION);
       if (afterOAuth || authManager.requiresTerms) {
         await api.acceptTerms(TERMS_VERSION);
+        localStorage.setItem(TERMS_STORAGE_KEY, TERMS_VERSION);
         await authManager.checkAuthStatus();
         await close();
       } else {
+        localStorage.setItem(TERMS_STORAGE_KEY, TERMS_VERSION);
         await close();
         await authManager.startLogin('/');
       }

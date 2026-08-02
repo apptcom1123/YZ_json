@@ -61,9 +61,15 @@ async function syncCloudDivinations() {
   if (!settingsResponse.settings?.saveDivinationToCloud) return;
 
   const response = await api.getDivinations();
+  const remoteRecords = response.records || [];
+  const remoteIds = new Set(remoteRecords.map(record => record.id));
   const localByServerId = new Map(state.divinations.filter(item => item.serverId).map(item => [item.serverId, item]));
-  for (const record of response.records || []) {
-    if (!localByServerId.has(record.id)) state.divinations.push(toLocalCloudDivination(record));
+  state.divinations = state.divinations.filter(item => !item.serverId || remoteIds.has(item.serverId));
+  for (const remoteRecord of remoteRecords) {
+    const localRecord = localByServerId.get(remoteRecord.id);
+    const normalized = toLocalCloudDivination(remoteRecord);
+    if (localRecord) Object.assign(localRecord, normalized);
+    else state.divinations.push(normalized);
   }
   saveDivinations();
   if (!document.getElementById('notes-panel').hidden) renderDivinations();
@@ -71,8 +77,6 @@ async function syncCloudDivinations() {
 
 authManager.onAuthChange(({ isLoggedIn }) => {
   if (!isLoggedIn) return;
-  syncCloudNotes().catch(error => console.warn('Cloud note sync failed:', error));
-  syncCloudDivinations().catch(error => console.warn('Cloud divination sync failed:', error));
   const userId = authManager.getCurrentUser()?.id;
   if (!userId || typeof realtimeClient === 'undefined') return;
   realtimeClient.subscribeToNotifications(userId, () => loadNotificationsList());

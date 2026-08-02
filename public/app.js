@@ -50,15 +50,60 @@ function localNotesForDocument(doc){
 
 // 初始化認證系統（在其他 UI 初始化前進行）
 if(typeof authManager !== 'undefined'){
-  authManager.onAuthChange(()=>updateAuthUI?.());
+  authManager.onAuthChange(authState=>{
+    updateAuthUI?.();
+    scheduleAccountStateRefresh(authState);
+  });
   authManager.init().then(()=>{
-    // 初始化完成後更新 UI
-    setTimeout(()=>updateAuthUI?.(), 100);
+    // 再檢查一次，確保後載入的帳戶資料同步函式也會執行。
+    setTimeout(()=>{
+      updateAuthUI?.();
+      scheduleAccountStateRefresh({
+        isLoggedIn:authManager.isLoggedIn,
+        user:authManager.getCurrentUser?.()
+      });
+    },100);
   }).catch(err=>{
     console.warn('認證初始化失敗:', err);
     // Keep the real Google sign-in action reachable if the session check fails.
     updateAuthUI?.();
   });
+}
+
+let accountRefreshVersion=0;
+
+function scheduleAccountStateRefresh(authState){
+  const version=++accountRefreshVersion;
+  setTimeout(()=>refreshAccountState(authState,version).catch(error=>{
+    console.warn('帳戶資料刷新失敗:',error);
+  }),0);
+}
+
+async function refreshAccountState({isLoggedIn,user}={},version=accountRefreshVersion){
+  const userId=isLoggedIn ? user?.id : null;
+  if(!userId){
+    renderNotes();
+    renderDivinations();
+    applyHighlights();
+    const favoritesList=$('#favorites-list');
+    const notificationsList=$('#notifications-list');
+    if(favoritesList)favoritesList.innerHTML='<div style="padding:12px;text-align:center;color:#888">尚未登入</div>';
+    if(notificationsList)notificationsList.innerHTML='<div style="padding:12px;text-align:center;color:#888">尚未登入</div>';
+    return;
+  }
+
+  const tasks=[initializeSettings(),loadFavoritesList(),loadNotificationsList()];
+  if(typeof syncCloudNotes==='function')tasks.push(syncCloudNotes());
+  if(typeof syncCloudDivinations==='function')tasks.push(syncCloudDivinations());
+  await Promise.allSettled(tasks);
+
+  if(version!==accountRefreshVersion||!authManager.isLoggedIn||currentUserId()!==userId)return;
+  updateAuthUI();
+  renderNotes();
+  renderDivinations();
+  applyHighlights();
+  const root=$('.annotatable');
+  if(root?.dataset.doc)await loadPublicNotesForPage(root.dataset.doc);
 }
 
 initNavigation(); bindUI();
@@ -673,7 +718,7 @@ async function openThreadModal(cluster){
     const text=$('#thread-reply-text').value.trim();
     if(!text){toast('請輸入回覆內容');return;}
     
-    if(!api.sessionToken){
+    if(!authManager.isLoggedIn){
       toast('請先登入');
       return;
     }
@@ -769,7 +814,7 @@ function renderThreadContent(note){
     };
   }
   if(typeof realtimeClient !== 'undefined'){
-    realtimeClient.subscribeToReplies(note.id,async()=>{
+    const refreshReplies=async()=>{
       try{
         const response=await api.getNoteReplies(note.id);
         note.replies=response.replies||[];
@@ -777,6 +822,21 @@ function renderThreadContent(note){
       }catch(err){
         console.warn('無法同步最新回覆:',err);
       }
+    };
+    const refreshNote=async()=>{
+      try{
+        const response=await api.getNote(note.id);
+        Object.assign(note,response?.note||response);
+        renderThreadContent(note);
+      }catch(err){
+        console.warn('無法同步最新投票或收藏:',err);
+      }
+    };
+    realtimeClient.subscribeToReplies(note.id,refreshReplies);
+    realtimeClient.subscribeToVotes(note.id,refreshNote);
+    realtimeClient.subscribeToFavorites(note.id,refreshNote);
+    (note.replies||[]).forEach(reply=>{
+      realtimeClient.subscribeToReplyVotes(reply.id,refreshReplies);
     });
     // 開啟討論串後立即監聽內容、投票與收藏計數，不必先互動才開始同步。
     realtimeClient.subscribeToNoteChanges('engagement',note.id,update=>{
@@ -791,7 +851,7 @@ function renderThreadContent(note){
   container.querySelectorAll('.thread-vote').forEach(btn=>{
     btn.onclick=async(e)=>{
       e.preventDefault();
-      if(!api.sessionToken){
+      if(!authManager.isLoggedIn){
         toast('請先登入');
         return;
       }
@@ -805,20 +865,7 @@ function renderThreadContent(note){
         // 更新 note 對象的投票計數
         Object.assign(note, result.note);
         renderThreadContent(note);
-        
-        // 訂閱此註記的 Realtime 投票更新，讓其他用戶看到新投票
-        if(typeof realtimeClient !== 'undefined'){
-          const subId = `votes:${noteId}`;
-          realtimeClient.subscribeToVotes(noteId, (update)=>{
-            if(update.data){
-              note.upvote_count = update.data.upvote_count;
-              note.downvote_count = update.data.downvote_count;
-              note.favorite_count = update.data.favorite_count;
-              renderThreadContent(note);
-            }
-          });
-        }
-        
+
         toast(voteType==='up'?'已按讚':'已倒讚');
       }catch(err){
         console.error('投票失敗:',err);
@@ -830,7 +877,7 @@ function renderThreadContent(note){
   container.querySelectorAll('.thread-reply-vote').forEach(btn=>{
     btn.onclick=async(e)=>{
       e.preventDefault();
-      if(!api.sessionToken){
+      if(!authManager.isLoggedIn){
         toast('請先登入');
         return;
       }
@@ -851,7 +898,7 @@ function renderThreadContent(note){
   container.querySelectorAll('.thread-favorite').forEach(btn=>{
     btn.onclick=async(e)=>{
       e.preventDefault();
-      if(!api.sessionToken){
+      if(!authManager.isLoggedIn){
         toast('請先登入');
         return;
       }
@@ -864,18 +911,7 @@ function renderThreadContent(note){
         // 更新 note 對象的收藏計數
         Object.assign(note, result.note);
         renderThreadContent(note);
-        
-        // 訂閱此註記的 Realtime 收藏更新，讓其他用戶看到新收藏
-        if(typeof realtimeClient !== 'undefined'){
-          const subId = `favorites:${noteId}`;
-          realtimeClient.subscribeToFavorites(noteId, (update)=>{
-            if(update.data){
-              note.favorite_count = update.data.favorite_count;
-              renderThreadContent(note);
-            }
-          });
-        }
-        
+
         toast('已收藏');
       }catch(err){
         console.error('收藏失敗:',err);
@@ -1426,255 +1462,6 @@ function loadUserStats(){
 function closeUserMenu(){
   const dropdown=$('#user-menu-dropdown');
   if(dropdown)dropdown.hidden=true;
-}
-
-let pendingTermsSessionToken = null;
-let pendingTermsUser = null;
-
-// ===== 登入流程 =====
-async function showLoginModal(){
-  const modal=$('#login-modal');
-  const accountList=$('#account-list');
-  
-  if(!modal||!accountList)return;
-  
-  try{
-    // 啟動 OAuth 流程
-    const oauthStart = await api.startOAuth?.('/');
-    if (!oauthStart) {
-      throw new Error('無法啟動 OAuth 流程');
-    }
-
-    // 保存 state 和 nonce 用於回調驗證
-    sessionStorage.setItem('oauth_state', oauthStart.state);
-    sessionStorage.setItem('oauth_nonce', oauthStart.nonce);
-    sessionStorage.setItem('oauth_return_to', '/');
-    
-    console.log('🔵 OAuth Mode:', oauthStart.mode);
-    
-    if (oauthStart.mode === 'google-oauth') {
-      // 真實 Google OAuth - 重定向到 Google 登入
-      console.log('🔵 使用真實 Google OAuth，重定向到 Google...');
-      window.location.href = oauthStart.authUrl;
-    } else {
-      // Mock OAuth - 顯示測試帳號選擇器
-      console.log('🟡 使用 Mock OAuth，顯示帳號選擇器...');
-      const response = await api.getMockAccounts?.();
-      if (response && response.accounts) {
-        accountList.innerHTML = response.accounts.map(account => `
-          <button class="login-account-button" data-account="${account.id}" type="button" style="padding:12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;text-align:left;transition:all 0.2s">
-            <strong>${account.name}</strong><br>
-            <span style="font-size:0.85rem;color:#666">${account.email}</span>
-            ${account.isDisabled ? '<span style="display:block;color:#f00;font-size:0.8rem;margin-top:4px">（已禁用）</span>' : ''}
-          </button>
-        `).join('');
-        
-        // 綁定帳號選擇事件
-        accountList.onclick = async e => {
-          const btn = e.target.closest('[data-account]');
-          if (!btn) return;
-          const accountId = btn.dataset.account;
-          
-          // 完成 Mock OAuth 登入
-          await completeMockOAuthLogin(accountId, oauthStart.state, oauthStart.nonce);
-        };
-      }
-      modal.hidden = false;
-      $('#backdrop').hidden = false;
-    }
-  } catch(err){
-    console.error('登入啟動失敗:', err);
-    accountList.innerHTML = `<p style="color:#f00">登入失敗: ${err.message}</p>`;
-    modal.hidden = false;
-    $('#backdrop').hidden = false;
-  }
-}
-
-// ===== Mock OAuth 完成流程 =====
-async function completeMockOAuthLogin(accountId, state, nonce) {
-  try {
-    // 直接顯示服務條款接受界面
-    showTermsModal(accountId, state, nonce);
-  } catch (err) {
-    console.error('Mock OAuth 登入失敗:', err);
-    alert(`登入失敗: ${err.message}`);
-  }
-}
-
-// ===== Google OAuth 回調處理（由後端重定向回來）=====
-async function handleGoogleOAuthCallback() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
-  const state = params.get('state');
-
-  if (!code || !state) {
-    console.log('非 Google OAuth 回調');
-    return false;
-  }
-
-  try {
-    console.log('🔵 處理 Google OAuth 回調...');
-    
-    // 檢查 state 是否匹配
-    const savedState = sessionStorage.getItem('oauth_state');
-    if (state !== savedState) {
-      throw new Error('State 驗證失敗（防 CSRF 攻擊）');
-    }
-
-    // 完成 Google OAuth 登入
-    const result = await api.post('/auth/google/callback', {
-      code,
-      state
-    });
-
-    if (result.requiresTermsAcceptance && result.sessionToken) {
-      // Google 首次登入：先接受條款，再完成登入
-      pendingTermsSessionToken = result.sessionToken;
-      pendingTermsUser = result.user || null;
-      showTermsModal(null, null, null);
-      return true;
-    }
-
-    if (result.success) {
-      // 保存會話 token
-      api.saveSessionToken(result.sessionToken);
-
-      // 保存用戶信息
-      if (typeof authManager !== 'undefined') {
-        authManager.user = result.user;
-        authManager.isLoggedIn = true;
-        authManager.notifyListeners();
-      }
-
-      // 清理臨時存儲
-      sessionStorage.removeItem('oauth_state');
-      sessionStorage.removeItem('oauth_nonce');
-      sessionStorage.removeItem('oauth_return_to');
-
-      // 更新 UI
-      updateAuthUI();
-
-      // 重定向到應用（清除 URL 參數）
-      window.location.href = result.returnTo || '/';
-    }
-  } catch (err) {
-    console.error('Google OAuth 回調失敗:', err);
-    alert(`登入失敗: ${err.message}`);
-    // 重新導向到登入頁面
-    window.location.href = '/';
-  }
-}
-
-// 頁面加載時檢查 Google OAuth 回調
-
-// ===== 服務條款接受流程 =====
-async function showTermsModal(accountId, state, nonce){
-  const modal=$('#terms-modal');
-  const checkbox=$('#terms-agree-checkbox');
-  const acceptBtn=$('#accept-terms');
-  const cancelBtn=$('#cancel-terms');
-  const closeBtn=$('#close-terms');
-  
-  if(!modal)return;
-  
-  // 重置複選框
-  checkbox.checked=false;
-  acceptBtn.disabled=true;
-  
-  // 複選框變更事件
-  checkbox.onchange=()=>{
-    acceptBtn.disabled=!checkbox.checked;
-  };
-  
-  // 接受按鈕
-  acceptBtn.onclick=async ()=>{
-    try{
-      acceptBtn.disabled=true;
-      acceptBtn.textContent='處理中...';
-
-      let result = null;
-
-      if (pendingTermsSessionToken) {
-        // Google OAuth：先使用暫時 session 接受條款，再視為登入完成
-        api.saveSessionToken(pendingTermsSessionToken);
-        await api.acceptTerms('1.0');
-        result = {
-          success: true,
-          sessionToken: pendingTermsSessionToken,
-          user: pendingTermsUser
-        };
-      } else {
-        // Mock OAuth：原流程
-        result = await api.post('/auth/accept-terms-then-login', {
-          state,
-          nonce,
-          selectedAccount: accountId,
-          docVersion: '1.0',
-          agreedToAll: true
-        });
-      }
-      
-      if (result.success) {
-        // 保存會話 token
-        api.saveSessionToken(result.sessionToken);
-        
-        // 保存用戶信息
-        if(typeof authManager !== 'undefined'){
-          authManager.user=result.user;
-          authManager.isLoggedIn=true;
-          authManager.notifyListeners();
-        }
-        
-        // 清理臨時存儲
-        sessionStorage.removeItem('oauth_state');
-        sessionStorage.removeItem('oauth_nonce');
-        sessionStorage.removeItem('oauth_return_to');
-
-        // 清理 Google 條款暫存狀態
-        pendingTermsSessionToken = null;
-        pendingTermsUser = null;
-
-        // 清除 URL query（code/state）
-        if (window.location.search.includes('code=')) {
-          window.history.replaceState({}, document.title, '/');
-        }
-        
-        // 登入成功
-        modal.hidden=true;
-        $('#login-modal').hidden=true;
-        $('#backdrop').hidden=true;
-        updateAuthUI();
-      } else {
-        throw new Error(result.message || '登入失敗');
-      }
-    }catch(err){
-      console.error('接受條款失敗:', err);
-      alert(`操作失敗: ${err.message}`);
-      acceptBtn.disabled=false;
-      acceptBtn.textContent='接受條款並登入';
-    }
-  };
-  
-  // 取消按鈕
-  cancelBtn.onclick=()=>{
-    pendingTermsSessionToken = null;
-    pendingTermsUser = null;
-    modal.hidden=true;
-    $('#backdrop').hidden=true;
-    // 顯示登入模態框
-    showLoginModal();
-  };
-  
-  // 關閉按鈕
-  closeBtn.onclick=()=>{
-    pendingTermsSessionToken = null;
-    pendingTermsUser = null;
-    modal.hidden=true;
-    $('#backdrop').hidden=true;
-  };
-  
-  modal.hidden=false;
-  $('#backdrop').hidden=false;
 }
 
 // ===== 設定頁面 =====

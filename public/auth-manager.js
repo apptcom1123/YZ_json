@@ -1,5 +1,13 @@
 class AuthManager {
-  constructor() { this.user = null; this.isLoggedIn = false; this.requiresTerms = false; this.listeners = []; this.client = null; }
+  constructor() {
+    this.user = null;
+    this.isLoggedIn = false;
+    this.requiresTerms = false;
+    this.listeners = [];
+    this.client = null;
+    this.statusPromise = null;
+    this.authRefreshQueue = Promise.resolve();
+  }
 
   async init() {
     const config = window.__SUPABASE_CONFIG__;
@@ -14,7 +22,7 @@ class AuthManager {
     this.client.auth.onAuthStateChange((_event, session) => {
       if (session?.access_token) api.saveSessionToken(session.access_token);
       if (!session) api.clearSessionToken();
-      window.setTimeout(() => this.checkAuthStatus(), 0);
+      window.setTimeout(() => this.queueAuthStatusRefresh(), 0);
     });
     const { data: { session } } = await this.client.auth.getSession();
     if (session?.access_token) api.saveSessionToken(session.access_token);
@@ -38,12 +46,41 @@ class AuthManager {
   }
 
   async checkAuthStatus() {
+    if (this.statusPromise) return this.statusPromise;
+    this.statusPromise = this.refreshAuthStatus();
     try {
-      const response = await api.getAuthStatus();
-      const browserAccepted = localStorage.getItem('iching_terms_version') === '2026-07-26';
-      this.user = response.user;
-      this.requiresTerms = Boolean(response.requiresTerms) || !browserAccepted;
-      this.isLoggedIn = Boolean(response.loggedIn) && browserAccepted;
+      return await this.statusPromise;
+    } finally {
+      this.statusPromise = null;
+    }
+  }
+
+  queueAuthStatusRefresh() {
+    this.authRefreshQueue = this.authRefreshQueue
+      .catch(() => {})
+      .then(async () => {
+        if (this.statusPromise) await this.statusPromise;
+        return this.checkAuthStatus();
+      });
+    return this.authRefreshQueue;
+  }
+
+  async refreshAuthStatus() {
+    try {
+      const termsVersion = window.ICHING_TERMS_VERSION || '2026-07-26';
+      const browserAccepted = localStorage.getItem('iching_terms_version') === termsVersion;
+      let response = await api.getAuthStatus();
+
+      // The pre-login checkbox is recorded locally before OAuth. Once Google has
+      // verified the user, use that authenticated session to persist the consent.
+      if (response.requiresTerms && browserAccepted) {
+        await api.acceptTerms(termsVersion);
+        response = await api.getAuthStatus();
+      }
+
+      this.user = response.user || null;
+      this.requiresTerms = Boolean(response.requiresTerms) || (Boolean(response.loggedIn) && !browserAccepted);
+      this.isLoggedIn = Boolean(response.loggedIn) && browserAccepted && !this.requiresTerms;
       this.notifyListeners(); return response;
     } catch (_) {
       this.user = null; this.isLoggedIn = false; this.requiresTerms = false; this.notifyListeners(); return { loggedIn: false };
