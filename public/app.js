@@ -17,12 +17,18 @@ const DEFAULT_USER_SETTINGS={
   noteVisibilityThresholdPercent:50,
   notifyOnReply:true
 };
+const PUBLIC_NOTE_RANK_WINDOW=20;
+const BUBBLE_LONG_PRESS_MS=350;
+const THRESHOLD_SAVE_DELAY_MS=220;
 let currentNoteThresholdPercent=50;
+const thresholdSaveState={timer:null,saving:false,desired:50,persisted:50};
 const publicNotesInFlight=new Map();
 const publicNotesRefreshTimers=new Map();
 const publicNotesRefreshPending=new Set();
 const publicNoteRealtimeQueue=new Map();
+const publicNoteRankTables=new Map();
 let publicNoteRenderFrame=null;
+let thresholdRenderFrame=null;
 let activePublicNotesArticleId=null;
 let activePublicNotesSubscriptionId=null;
 let statsRequestVersion=0;
@@ -58,13 +64,23 @@ function applySettingsToControls(settings=DEFAULT_USER_SETTINGS){
   if($('#settings-public-notes'))$('#settings-public-notes').checked=Boolean(settings.allowPublicNotes);
   if($('#settings-notify-replies'))$('#settings-notify-replies').checked=settings.notifyOnReply!==false;
   const threshold=$('#settings-threshold');
-  const thresholdValue=Number(settings.noteVisibilityThresholdPercent ?? 50);
+  const hasPendingThreshold=Boolean(thresholdSaveState.timer)
+    ||thresholdSaveState.saving
+    ||thresholdSaveState.desired!==thresholdSaveState.persisted;
+  const thresholdValue=hasPendingThreshold
+    ?thresholdSaveState.desired
+    :Number(settings.noteVisibilityThresholdPercent ?? 50);
   currentNoteThresholdPercent=thresholdValue;
+  if(!hasPendingThreshold){
+    thresholdSaveState.desired=thresholdValue;
+    thresholdSaveState.persisted=thresholdValue;
+  }
   if(threshold){
     threshold.value=thresholdValue;
     threshold.dataset.savedValue=String(thresholdValue);
   }
   if($('#settings-threshold-value'))$('#settings-threshold-value').textContent=thresholdValue+'%';
+  handleThresholdChange();
 }
 
 function setCloudSettingsDisabled(disabled){
@@ -371,7 +387,7 @@ async function renderText(id){
 }
 
 function renderAbout(){
-  reader.innerHTML=`<article class="text-page annotatable" data-doc="text-about"><header><p class="text-kicker">使 用 說 明</p><h1>網站介紹</h1></header><div class="about-grid"><section class="feature-card"><h2>六十四卦查閱</h2><p>從左上角目錄開啟六十四卦索引，可依卦名、卦序、卦辭、爻辭或詩訣搜尋。</p></section><section class="feature-card"><h2>易傳獨立閱讀</h2><p>文言、繫辭、說卦、序卦、雜卦與彖象合參皆整理為獨立文字頁。</p></section><section class="feature-card"><h2>本機螢光筆註解</h2><ol class="steps"><li>反白想記錄的內文。</li><li>點擊畫面下方「加入螢光筆註解」。</li><li>在視窗選擇「私人」或「公開」，輸入心得後送出。</li><li>私人註解只會存在您的裝置，公開註解會與其他使用者分享。</li><li>長按內文旁的小泡泡可快速查看；雙擊泡泡可重新編輯。</li></ol></section><section class="feature-card"><h2>社群功能</h2><ol class="steps"><li>當您設定註解為「公開」時，其他登入使用者可以看到您的匿名註解。</li><li>相同位置的公開註解會自動聚合成小氣泡，您可點擊查看。</li><li>您可以按讚、倒讚或收藏他人的公開註解。</li><li>投票結果（按讚/倒讚）會決定註解的排序與可見性。</li></ol></section><section class="feature-card"><h2>易經占卜</h2><ol class="steps"><li>點擊螢幕右下方的「占」按鈕。</li><li>輸入你的提問或所求。</li><li>系統將使用古法蓍草演卦生成結果。</li><li>結果會顯示本卦、變爻與之卦。</li><li>可將占卜結果儲存，方便日後查閱。</li></ol></section></div><div class="privacy-note"><strong>隱私說明</strong><br><strong>私人註解：</strong>只存放在目前瀏覽器的 localStorage，不會上傳到伺服器。清除網站資料、換瀏覽器或換裝置時，資料不會自動保留。<br><br><strong>公開註解：</strong>儲存在伺服器上與其他使用者分享。您的姓名不會顯示；系統會根據用戶ID與文章生成一致的「匿名使用者 XXXX」代碼。投票與收藏記錄僅記錄投票狀態，不涉及個人隱私。</div></article>`;
+  reader.innerHTML=`<article class="text-page annotatable" data-doc="text-about"><header><p class="text-kicker">使 用 說 明</p><h1>網站介紹</h1></header><div class="about-grid"><section class="feature-card"><h2>六十四卦查閱</h2><p>從左上角目錄開啟六十四卦索引，可依卦名、卦序、卦辭、爻辭或詩訣搜尋。</p></section><section class="feature-card"><h2>易傳獨立閱讀</h2><p>文言、繫辭、說卦、序卦、雜卦與彖象合參皆整理為獨立文字頁。</p></section><section class="feature-card"><h2>本機螢光筆註解</h2><ol class="steps"><li>反白想記錄的內文。</li><li>點擊畫面下方「加入螢光筆註解」。</li><li>在視窗選擇「私人」或「公開」，輸入心得後送出。</li><li>私人註解只會存在您的裝置，公開註解會與其他使用者分享。</li><li>長按內文旁的小泡泡可快速查看；雙擊泡泡可重新編輯。</li></ol></section><section class="feature-card"><h2>社群功能</h2><ol class="steps"><li>當您設定註解為「公開」時，其他登入使用者可以看到您的匿名註解。</li><li>相同位置的公開註解會自動聚合成小氣泡，您可長按顯示內容，或雙擊查看討論串。</li><li>在討論串內，您可以按讚、倒讚或收藏他人的公開註解。</li><li>投票結果（按讚/倒讚）會決定註解的排序與可見性。</li></ol></section><section class="feature-card"><h2>易經占卜</h2><ol class="steps"><li>點擊螢幕右下方的「占」按鈕。</li><li>輸入你的提問或所求。</li><li>系統將使用古法蓍草演卦生成結果。</li><li>結果會顯示本卦、變爻與之卦。</li><li>可將占卜結果儲存，方便日後查閱。</li></ol></section></div><div class="privacy-note"><strong>隱私說明</strong><br><strong>私人註解：</strong>只存放在目前瀏覽器的 localStorage，不會上傳到伺服器。清除網站資料、換瀏覽器或換裝置時，資料不會自動保留。<br><br><strong>公開註解：</strong>儲存在伺服器上與其他使用者分享。您的姓名不會顯示；系統會根據用戶ID與文章生成一致的「匿名使用者 XXXX」代碼。投票與收藏記錄僅記錄投票狀態，不涉及個人隱私。</div></article>`;
   applyHighlights();
 }
 
@@ -622,26 +638,62 @@ function dedupeById(items){
   return [...new Map((items||[]).filter(item=>item?.id).map(item=>[item.id,item])).values()];
 }
 
-function applyPublicNoteThreshold(notes,thresholdPercent=currentNoteThresholdPercent){
-  const percent=Math.min(100,Math.max(0,Number(thresholdPercent)||0));
+function publicNoteClusterKey(note){
+  const clusterKey=Number(note.cluster_key);
+  return String(Number.isFinite(clusterKey)?clusterKey:Math.floor(Number(note.anchor_offset_start||0)/5));
+}
+
+function buildPublicNoteRankTable(notes){
   const clusters=new Map();
   (notes||[]).forEach(note=>{
-    const key=`${note.paragraph_anchor}:${note.cluster_key}`;
+    const key=publicNoteClusterKey(note);
     if(!clusters.has(key))clusters.set(key,[]);
     clusters.get(key).push(note);
   });
-  const visible=[];
-  clusters.forEach(cluster=>{
-    cluster.sort((a,b)=>(b.score||0)-(a.score||0)||(b.upvote_count||0)-(a.upvote_count||0)||new Date(b.created_at)-new Date(a.created_at));
-    visible.push(...cluster.slice(0,Math.ceil(cluster.length*percent/100)));
+  const regions=new Map();
+  clusters.forEach((cluster,key)=>{
+    const region=Math.floor(Number(key)/PUBLIC_NOTE_RANK_WINDOW);
+    if(!regions.has(region))regions.set(region,[]);
+    regions.get(region).push({
+      key,
+      score:Math.max(...cluster.map(note=>Number(note.score)||0)),
+      upvotes:Math.max(...cluster.map(note=>Number(note.upvote_count)||0)),
+      newest:Math.max(...cluster.map(note=>new Date(note.created_at).getTime()||0))
+    });
   });
-  return visible;
+  regions.forEach(region=>region.sort((a,b)=>
+    b.score-a.score||b.upvotes-a.upvotes||b.newest-a.newest||Number(a.key)-Number(b.key)
+  ));
+  return regions;
 }
 
-function renderCachedPublicNotes(articleId){
+function applyPublicNoteThreshold(notes,thresholdPercent=currentNoteThresholdPercent,rankTable=null){
+  const percent=Math.min(100,Math.max(0,Number(thresholdPercent)||0));
+  if(percent<=0)return notes||[];
+  const visibleClusters=new Set();
+  (rankTable||buildPublicNoteRankTable(notes)).forEach(region=>{
+    const showCount=Math.max(1,Math.ceil(region.length*(100-percent)/100));
+    const cutoff=region[Math.min(showCount,region.length)-1];
+    region.forEach(item=>{
+      if(item.score>cutoff.score||(item.score===cutoff.score&&item.upvotes>=cutoff.upvotes)){
+        visibleClusters.add(item.key);
+      }
+    });
+  });
+  return (notes||[]).filter(note=>visibleClusters.has(publicNoteClusterKey(note)));
+}
+
+function rebuildPublicNoteRankTable(articleId){
+  const notes=window.publicNotesByArticle?.[articleId]||[];
+  publicNoteRankTables.set(articleId,buildPublicNoteRankTable(notes));
+}
+
+function renderCachedPublicNotes(articleId,{animateThreshold=false}={}){
   const root=$('.annotatable');
   if(!root||root.dataset.doc!==articleId)return;
-  const notes=applyPublicNoteThreshold(window.publicNotesByArticle?.[articleId]||[]);
+  const sourceNotes=window.publicNotesByArticle?.[articleId]||[];
+  if(!publicNoteRankTables.has(articleId))rebuildPublicNoteRankTable(articleId);
+  const notes=applyPublicNoteThreshold(sourceNotes,currentNoteThresholdPercent,publicNoteRankTables.get(articleId));
   const publicEntries=notes.map(note=>({
     note:{...note,visibility:'public',doc:articleId,start:note.anchor_offset_start,end:note.anchor_offset_end,comment:note.content},
     range:rangeFromOffsets(root,note.anchor_offset_start,note.anchor_offset_end),
@@ -656,7 +708,7 @@ function renderCachedPublicNotes(articleId){
     .filter(note=>note.visibility!=='public'||!note.serverId)
     .map(note=>({note,range:rangeFromOffsets(root,note.start,note.end),type:'private',clusterId:Math.floor(note.start/5)}))
     .filter(entry=>entry.range);
-  renderBubbles([...privateEntries,...publicEntries]);
+  renderBubbles([...privateEntries,...publicEntries],{animatePublic:animateThreshold});
 }
 
 function schedulePublicNotesRefresh(articleId,delay=100){
@@ -690,7 +742,7 @@ function applyPublicNoteRealtimeUpdate(articleId,update,render=true){
   }else if(index>=0){
     notes.splice(index,1);
   }
-  if(render)renderCachedPublicNotes(articleId);
+  if(render){rebuildPublicNoteRankTable(articleId);renderCachedPublicNotes(articleId);}
 }
 
 function queuePublicNoteRealtimeUpdate(articleId,update){
@@ -705,6 +757,7 @@ function queuePublicNoteRealtimeUpdate(articleId,update){
     publicNoteRenderFrame=null;
     publicNoteRealtimeQueue.forEach((updates,queuedArticleId)=>{
       updates.forEach(item=>applyPublicNoteRealtimeUpdate(queuedArticleId,item,false));
+      rebuildPublicNoteRankTable(queuedArticleId);
       renderCachedPublicNotes(queuedArticleId);
     });
     publicNoteRealtimeQueue.clear();
@@ -730,11 +783,12 @@ async function loadPublicNotesForPage(articleId){
   }
   const request=(async()=>{
     try{
-      const response=await fetch(`/api/notes?articleId=${encodeURIComponent(articleId)}&thresholdPercent=100`);
+      const response=await fetch(`/api/notes?articleId=${encodeURIComponent(articleId)}&thresholdPercent=0`);
       if(!response.ok)return;
       const data=await response.json();
       if(!window.publicNotesByArticle)window.publicNotesByArticle={};
       window.publicNotesByArticle[articleId]=dedupeById(Array.isArray(data.notes)?data.notes:[]);
+      rebuildPublicNoteRankTable(articleId);
       renderCachedPublicNotes(articleId);
     }catch(err){
       console.warn('Public annotation refresh failed:',err);
@@ -749,10 +803,55 @@ async function loadPublicNotesForPage(articleId){
 
 function handleThresholdChange(){
   const articleId=$('.annotatable')?.dataset.doc;
-  if(articleId)renderCachedPublicNotes(articleId);
+  if(!articleId||thresholdRenderFrame)return;
+  thresholdRenderFrame=requestAnimationFrame(()=>{
+    thresholdRenderFrame=null;
+    renderCachedPublicNotes(articleId,{animateThreshold:true});
+  });
 }
 
-function renderBubbles(entries){
+function queueThresholdSettingSave(control,valueEl,value){
+  thresholdSaveState.desired=value;
+  clearTimeout(thresholdSaveState.timer);
+  thresholdSaveState.timer=setTimeout(()=>{
+    thresholdSaveState.timer=null;
+    flushThresholdSetting(control,valueEl);
+  },THRESHOLD_SAVE_DELAY_MS);
+}
+
+async function flushThresholdSetting(control,valueEl){
+  if(thresholdSaveState.saving||thresholdSaveState.desired===thresholdSaveState.persisted)return;
+  const target=thresholdSaveState.desired;
+  const previous=thresholdSaveState.persisted;
+  thresholdSaveState.saving=true;
+  control.setAttribute('aria-busy','true');
+  try{
+    await api.updateUserSettings({noteVisibilityThresholdPercent:target});
+    thresholdSaveState.persisted=target;
+    control.dataset.savedValue=String(target);
+  }catch(err){
+    console.error('更新閾值失敗:',err);
+    if(thresholdSaveState.desired===target){
+      thresholdSaveState.desired=previous;
+      currentNoteThresholdPercent=previous;
+      control.value=String(previous);
+      if(valueEl)valueEl.textContent=previous+'%';
+      handleThresholdChange();
+      toast('閾值儲存失敗，已恢復原設定');
+    }
+  }finally{
+    thresholdSaveState.saving=false;
+    control.removeAttribute('aria-busy');
+    if(thresholdSaveState.desired!==thresholdSaveState.persisted&&!thresholdSaveState.timer){
+      thresholdSaveState.timer=setTimeout(()=>{
+        thresholdSaveState.timer=null;
+        flushThresholdSetting(control,valueEl);
+      },0);
+    }
+  }
+}
+
+function renderBubbles(entries,{animatePublic=false}={}){
   // 清除現有的所有氣泡
   document.querySelectorAll('.annotation-bubble').forEach(b => b.remove());
   
@@ -819,6 +918,7 @@ function renderBubbles(entries){
       // 創建聚合氣泡
       const bubble=document.createElement('button');
       bubble.className='annotation-bubble annotation-bubble-public';
+      if(animatePublic)bubble.classList.add('annotation-bubble-threshold-enter');
       bubble.type='button';
       
       // 氣泡顯示註記數量或"聚合"標誌
@@ -845,16 +945,31 @@ function bindClusterBubble(bubble,cluster){
   const prefetch=()=>queueThreadPrefetch(orderedThreadCluster(cluster).slice(0,2).map(entry=>entry.note));
   bubble.addEventListener('pointerenter',prefetch,{once:true,passive:true});
   bubble.addEventListener('focus',prefetch,{once:true});
+  bindBubbleLongPress(bubble,()=>orderedThreadCluster(cluster)[0]?.note,prefetch);
   bubble.addEventListener('dblclick',e=>{
     e.preventDefault();
     openThreadModal(cluster);
   });
 }
 
+function bindBubbleLongPress(bubble,getNote,onStart=null){
+  let timer=null;
+  const cancel=()=>{if(timer){clearTimeout(timer);timer=null;}};
+  bubble.addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    cancel();
+    onStart?.();
+    timer=setTimeout(()=>{
+      timer=null;
+      const note=getNote();
+      if(note)showBubble(note);
+    },BUBBLE_LONG_PRESS_MS);
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(type=>bubble.addEventListener(type,cancel));
+}
+
 function bindBubble(bubble,note){
-  let timer;
-  bubble.addEventListener('pointerdown',e=>{e.preventDefault();timer=setTimeout(()=>showBubble(note),550);});
-  ['pointerup','pointercancel','pointerleave'].forEach(type=>bubble.addEventListener(type,()=>clearTimeout(timer)));
+  bindBubbleLongPress(bubble,()=>note);
   bubble.addEventListener('dblclick',e=>{e.preventDefault();hideBubble();openAnnotationModal(note);});
 }
 
@@ -1000,15 +1115,23 @@ function findReplyById(replies,replyId){
   return null;
 }
 
+function animateThreadControl(selector,className){
+  const control=$('#thread-content')?.querySelector(selector);
+  if(!control)return;
+  control.classList.add(className);
+  control.addEventListener('animationend',()=>control.classList.remove(className),{once:true});
+}
+
 async function sendThreadReply(note,reply,submitButton=null){
   if(reply._sending)return;
+  const wasPending=reply._pending;
   const wasFailed=reply._failed;
   if(wasFailed)note.reply_count=(Number(note.reply_count)||0)+1;
   reply._pending=true;
   reply._failed=false;
   reply._sending=true;
   if(submitButton)submitButton.disabled=true;
-  renderThreadContent(note);
+  if(!wasPending)renderThreadContent(note);
   try{
     const result=await api.addReply(note.id,reply.content,null,reply._clientMutationId);
     const official=result.reply;
@@ -1099,7 +1222,7 @@ function queueThreadReplyRealtimeUpdate(note,update){
         const next={...item.data,_realtimeCommitTimestamp:item.commitTimestamp||previousCommit||null};
         if(index>=0)replies[index]={...replies[index],...next};
         else if(mutationIndex>=0)replies[mutationIndex]={...replies[mutationIndex],...next,_pending:false,_failed:false};
-        else replies.push(next);
+        else replies.push({...next,_justInserted:true});
       }
       touchedNotes.add(targetNote);
     });
@@ -1221,7 +1344,7 @@ async function openThreadModal(cluster){
       id:temporaryId,note_id:currentNote.id,author_id:currentUserId(),content:text,
       status:'active',created_at:new Date().toISOString(),upvote_count:0,downvote_count:0,
       userVote:null,public_display_name:authManager.getCurrentUser?.()?.public_display_name||'我',
-      _pending:true,_failed:false,_clientMutationId:mutationId
+      _pending:true,_failed:false,_justInserted:true,_clientMutationId:mutationId
     };
     if(!currentNote.replies)currentNote.replies=[];
     currentNote.replies.push(temporaryReply);
@@ -1267,7 +1390,7 @@ function renderThreadContent(note){
   const repliesHTML=note.repliesLoading&&!replies.length
     ? '<div style="padding:16px;text-align:center;color:#888;background:#fafafa">正在載入回覆...</div>'
     : replies.length ? replies.map((r,i)=>`
-    <div style="padding:12px;padding-left:${Math.min(88,32+(r._depth||0)*18)}px;border-bottom:1px solid #eee;background:#fafafa">
+    <div class="thread-reply${r._justInserted?' thread-reply-enter':''}" data-reply-id="${r.id}" style="padding-left:${Math.min(88,32+(r._depth||0)*18)}px">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
           <strong style="color:#555">${esc(r.public_display_name||r.public_alias||'\u533f\u540d\u4f7f\u7528\u8005')}</strong>
@@ -1284,6 +1407,10 @@ function renderThreadContent(note){
     </div>
   `).join('') : '<div style="padding:16px;text-align:center;color:#888;background:#fafafa">&#23578;&#28961;&#22238;&#35206;</div>';
     container.innerHTML=mainHTML+repliesHTML;
+  replies.filter(reply=>reply._justInserted).forEach(reply=>{
+    const original=findReplyById(note.replies,reply.id);
+    if(original)original._justInserted=false;
+  });
   const editButton=container.querySelector('.thread-edit-note');
   if(editButton){
     editButton.onclick=()=>{
@@ -1343,6 +1470,7 @@ function renderThreadContent(note){
       const snapshot=applyOptimisticVote(note,voteType);
       pendingEngagementActions.add(actionKey);
       renderThreadContent(note);
+      animateThreadControl(`.thread-vote[data-note-id="${noteId}"][data-vote="${voteType}"]`,'interaction-pop');
       try{
         const result=await api.voteNote(noteId,voteType);
         Object.assign(note, result.note);
@@ -1377,6 +1505,7 @@ function renderThreadContent(note){
       const snapshot=applyOptimisticVote(reply,btn.dataset.vote);
       pendingEngagementActions.add(actionKey);
       renderThreadContent(note);
+      animateThreadControl(`.thread-reply-vote[data-reply-id="${reply.id}"][data-vote="${btn.dataset.vote}"]`,'interaction-pop');
       try{
         const result=await api.voteReply(note.id,btn.dataset.replyId,btn.dataset.vote);
         if(result.reply)Object.assign(reply,result.reply);
@@ -1411,6 +1540,7 @@ function renderThreadContent(note){
       note.favorite_count=Math.max(0,snapshot.favorite_count+(note.isFavoritedByUser?1:-1));
       pendingEngagementActions.add(actionKey);
       renderThreadContent(note);
+      animateThreadControl(`.thread-favorite[data-note-id="${noteId}"]`,'interaction-settle');
       try{
         const result=await api.toggleFavorite(noteId);
         Object.assign(note, result.note);
@@ -2106,22 +2236,13 @@ async function initializeSettings(){
       thresholdEl.dataset.savedValue=thresholdEl.value;
       if(thresholdValueEl)thresholdValueEl.textContent=thresholdEl.value+'%';
       thresholdEl.oninput=e=>{
-        thresholdValueEl.textContent=e.target.value+'%';
-        currentNoteThresholdPercent=parseInt(e.target.value,10);
+        const next=parseInt(e.target.value,10);
+        if(thresholdValueEl)thresholdValueEl.textContent=next+'%';
+        currentNoteThresholdPercent=next;
         handleThresholdChange();
+        queueThresholdSettingSave(e.target,thresholdValueEl,next);
       };
-      thresholdEl.onchange=async e=>{
-        const previous=e.target.dataset.savedValue||'50';
-        const next=parseInt(e.target.value);
-        if(await updateSetting('noteVisibilityThresholdPercent',next)){
-          e.target.dataset.savedValue=String(next);
-        }else{
-          e.target.value=previous;
-          currentNoteThresholdPercent=parseInt(previous,10);
-          handleThresholdChange();
-          if(thresholdValueEl)thresholdValueEl.textContent=previous+'%';
-        }
-      };
+      thresholdEl.onchange=null;
     }
     
     // 通知設定
@@ -2491,7 +2612,7 @@ async function loadNotificationsListLegacy(){
 
 function notificationItemHTML(notif){
   const title=notif.type==='reply'?'有人回覆了你的註記':'系統通知';
-  return `<div class="notification-item" data-notification-id="${esc(notif.id)}" data-note-id="${esc(notif.note_id||notif.target_id||'')}" style="padding:12px;border-bottom:1px solid #eee;cursor:pointer;background:${notif.read_at?'#fff':'#f9f9f9'}" onclick="navigateToNotification('${esc(notif.id)}','${esc(notif.note_id||notif.target_id||'')}')">
+  return `<div class="notification-item${notif._justInserted?' notification-item-enter':''}" data-notification-id="${esc(notif.id)}" data-note-id="${esc(notif.note_id||notif.target_id||'')}" style="padding:12px;border-bottom:1px solid #eee;cursor:pointer;background:${notif.read_at?'#fff':'#f9f9f9'}" onclick="navigateToNotification('${esc(notif.id)}','${esc(notif.note_id||notif.target_id||'')}')">
     <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:4px">
       <strong style="color:#333">${title}</strong>
       <span style="font-size:0.85rem;color:#999">${new Date(notif.created_at).toLocaleDateString('zh-TW')}</span>
@@ -2507,6 +2628,7 @@ function renderNotificationCache(){
   list.innerHTML=notificationCache.length
     ? notificationCache.map(notificationItemHTML).join('')
     : '<div style="padding:12px;text-align:center;color:#888">尚無通知</div>';
+  notificationCache.forEach(notification=>{notification._justInserted=false;});
   list.querySelectorAll('.notification-item').forEach(item=>{
     const prefetch=()=>prefetchPersonalNote(item.dataset.noteId);
     item.addEventListener('pointerenter',prefetch,{once:true,passive:true});
@@ -2558,7 +2680,7 @@ function handleNotificationRealtimeUpdate(update){
       }else{
         const next={...item.data,_realtimeCommitTimestamp:item.commitTimestamp||previousCommit||null};
         if(index>=0)notificationCache[index]={...notificationCache[index],...next};
-        else notificationCache.push(next);
+        else notificationCache.push({...next,_justInserted:true});
       }
     });
     notificationRealtimeQueue.clear();

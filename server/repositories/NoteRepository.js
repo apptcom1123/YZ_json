@@ -1,6 +1,8 @@
 import { BaseRepository } from './BaseRepository.js';
 import crypto from 'crypto';
 
+const PUBLIC_NOTE_RANK_WINDOW = 20;
+
 export class NoteRepository extends BaseRepository {
   constructor(db) {
     super(db, 'notes');
@@ -8,22 +10,49 @@ export class NoteRepository extends BaseRepository {
 
   applyVisibilityThreshold(notes, thresholdPercent = 50) {
     const percent = Math.min(100, Math.max(0, Number(thresholdPercent) || 0));
+    if (percent <= 0) return notes || [];
     const clusters = new Map();
     for (const note of notes || []) {
-      const key = `${note.paragraph_anchor}:${note.cluster_key}`;
+      const clusterKey = Number.isFinite(Number(note.cluster_key))
+        ? Number(note.cluster_key)
+        : Math.floor(Number(note.anchor_offset_start || 0) / 5);
+      const key = String(clusterKey);
       if (!clusters.has(key)) clusters.set(key, []);
       clusters.get(key).push(note);
     }
 
-    const visible = [];
-    for (const cluster of clusters.values()) {
-      cluster.sort((a, b) =>
-        (b.score || 0) - (a.score || 0)
-        || (b.upvote_count || 0) - (a.upvote_count || 0)
-        || new Date(b.created_at) - new Date(a.created_at));
-      visible.push(...cluster.slice(0, Math.ceil(cluster.length * percent / 100)));
+    const regions = new Map();
+    for (const [key, cluster] of clusters) {
+      const regionKey = Math.floor(Number(key) / PUBLIC_NOTE_RANK_WINDOW);
+      if (!regions.has(regionKey)) regions.set(regionKey, []);
+      regions.get(regionKey).push({
+        key,
+        score: Math.max(...cluster.map(note => Number(note.score) || 0)),
+        upvotes: Math.max(...cluster.map(note => Number(note.upvote_count) || 0)),
+        newest: Math.max(...cluster.map(note => new Date(note.created_at).getTime() || 0))
+      });
     }
-    return visible;
+
+    const visibleClusters = new Set();
+    for (const region of regions.values()) {
+      region.sort((a, b) =>
+        b.score - a.score
+        || b.upvotes - a.upvotes
+        || b.newest - a.newest
+        || Number(a.key) - Number(b.key));
+      const showCount = Math.max(1, Math.ceil(region.length * (100 - percent) / 100));
+      const cutoff = region[Math.min(showCount, region.length) - 1];
+      for (const item of region) {
+        if (item.score > cutoff.score || (item.score === cutoff.score && item.upvotes >= cutoff.upvotes)) {
+          visibleClusters.add(item.key);
+        }
+      }
+    }
+    return (notes || []).filter(note => visibleClusters.has(String(
+      Number.isFinite(Number(note.cluster_key))
+        ? Number(note.cluster_key)
+        : Math.floor(Number(note.anchor_offset_start || 0) / 5)
+    )));
   }
 
   /**
