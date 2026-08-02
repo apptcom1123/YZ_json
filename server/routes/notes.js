@@ -20,7 +20,7 @@ function canReadNote(note, userId = null) {
  */
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { articleId, paragraphAnchor, clusterKey, thresholdPercent = 60 } = req.query;
+    const { articleId, paragraphAnchor, clusterKey, thresholdPercent = 50 } = req.query;
 
     if (!articleId) {
       return res.status(400).json({
@@ -38,13 +38,8 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // 為每條註記添加當前用戶的投票和收藏狀態
     if (req.user) {
-      for (const note of notes) {
-        const userVote = await noteRepo.getUserVote(note.id, req.user.userId);
-        const isFavorited = await noteRepo.isFavoritedBy(note.id, req.user.userId);
-
-        note.userVote = userVote?.vote_type || null;
-        note.isFavoritedByUser = isFavorited;
-      }
+      const engagement=await noteRepo.getUserEngagementForNotes(notes.map(note=>note.id),req.user.userId);
+      notes=notes.map(note=>({...note,...engagement.get(note.id)}));
     }
 
     res.json({
@@ -179,8 +174,10 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
 
     if (req.user) {
-      const userVote = await noteRepo.getUserVote(note.id, req.user.userId);
-      const isFavorited = await noteRepo.isFavoritedBy(note.id, req.user.userId);
+      const [userVote,isFavorited]=await Promise.all([
+        noteRepo.getUserVote(note.id,req.user.userId),
+        noteRepo.isFavoritedBy(note.id,req.user.userId)
+      ]);
 
       note.userVote = userVote?.vote_type || null;
       note.isFavoritedByUser = isFavorited;
@@ -318,15 +315,13 @@ router.post('/:id/vote', requireAuth, async (req, res) => {
       });
     }
 
-    await noteRepo.vote(req.params.id, req.user.userId, voteType);
-    const note = await noteRepo.findById(req.params.id);
-
-    const userVote = await noteRepo.getUserVote(req.params.id, req.user.userId);
+    const result=await noteRepo.vote(req.params.id, req.user.userId, voteType);
+    const note={...targetNote,...result};
 
     res.json({
       success: true,
       note,
-      userVote: userVote?.vote_type || null
+      userVote:result.userVote
     });
   } catch (error) {
     console.error('Vote error:', error);
@@ -353,13 +348,12 @@ router.post('/:id/favorite', requireAuth, async (req, res) => {
       });
     }
 
-    await noteRepo.toggleFavorite(req.params.id, req.user.userId);
-    const isFavorited = await noteRepo.isFavoritedBy(req.params.id, req.user.userId);
-    const note = await noteRepo.findById(req.params.id);
+    const result=await noteRepo.toggleFavorite(req.params.id, req.user.userId);
+    const note={...targetNote,...result,isFavoritedByUser:result.isFavorited};
 
     res.json({
       success: true,
-      isFavorited,
+      isFavorited:result.isFavorited,
       note
     });
   } catch (error) {

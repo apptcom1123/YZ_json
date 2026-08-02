@@ -332,7 +332,9 @@ export class NoteRepository extends BaseRepository {
         .maybeSingle();
       if (findError) throw findError;
 
+      let userVote = voteType;
       if (voteType === 'none' || existing?.vote_type === voteType) {
+        userVote = null;
         if (existing) {
           const { error } = await this.db
             .from('note_votes')
@@ -355,8 +357,7 @@ export class NoteRepository extends BaseRepository {
         if (error) throw error;
       }
 
-      await this.updateNoteScore(noteId);
-      return;
+      return { ...(await this.updateNoteScore(noteId)), userVote };
     }
 
     // 檢查是否已投票
@@ -364,7 +365,9 @@ export class NoteRepository extends BaseRepository {
       SELECT * FROM note_votes WHERE note_id = ? AND user_id = ?
     `, [noteId, userId]);
 
+    let userVote = voteType;
     if (voteType === 'none') {
+      userVote = null;
       // 取消投票
       if (existing) {
         await this.db.run(`
@@ -375,6 +378,7 @@ export class NoteRepository extends BaseRepository {
       if (existing) {
         // 更新投票
         if (existing.vote_type === voteType) {
+          userVote = null;
           // 同方向重複點擊 = 取消
           await this.db.run(`
             DELETE FROM note_votes WHERE note_id = ? AND user_id = ?
@@ -395,7 +399,7 @@ export class NoteRepository extends BaseRepository {
     }
 
     // 重新計算分數
-    await this.updateNoteScore(noteId);
+    return { ...(await this.updateNoteScore(noteId)), userVote };
   }
 
   /**
@@ -425,8 +429,10 @@ export class NoteRepository extends BaseRepository {
         if (error) throw error;
       }
 
-      await this.updateNoteFavoriteCount(noteId);
-      return;
+      return {
+        ...(await this.updateNoteFavoriteCount(noteId)),
+        isFavorited:!existing
+      };
     }
 
     const existing = await this.db.get(`
@@ -445,7 +451,10 @@ export class NoteRepository extends BaseRepository {
     }
 
     // 更新收藏計數
-    await this.updateNoteFavoriteCount(noteId);
+    return {
+      ...(await this.updateNoteFavoriteCount(noteId)),
+      isFavorited:!existing
+    };
   }
 
   /**
@@ -453,20 +462,20 @@ export class NoteRepository extends BaseRepository {
    */
   async updateNoteScore(noteId) {
     if (this.isSupabase) {
-      const { data: votes, error: voteError } = await this.db
-        .from('note_votes')
-        .select('vote_type')
-        .eq('note_id', noteId);
-      if (voteError) throw voteError;
-
-      const upvotes = (votes || []).filter(v => v.vote_type === 'up').length;
-      const downvotes = (votes || []).filter(v => v.vote_type === 'down').length;
+      const [upvoteResult,downvoteResult]=await Promise.all([
+        this.db.from('note_votes').select('*',{count:'exact',head:true}).eq('note_id',noteId).eq('vote_type','up'),
+        this.db.from('note_votes').select('*',{count:'exact',head:true}).eq('note_id',noteId).eq('vote_type','down')
+      ]);
+      if(upvoteResult.error)throw upvoteResult.error;
+      if(downvoteResult.error)throw downvoteResult.error;
+      const upvotes=upvoteResult.count||0;
+      const downvotes=downvoteResult.count||0;
       const { error } = await this.db
         .from('notes')
         .update({ upvote_count: upvotes, downvote_count: downvotes, score: upvotes - downvotes })
         .eq('id', noteId);
       if (error) throw error;
-      return;
+      return {upvote_count:upvotes,downvote_count:downvotes,score:upvotes-downvotes};
     }
 
     const stats = await this.db.get(`
@@ -486,6 +495,7 @@ export class NoteRepository extends BaseRepository {
     `;
 
     await this.db.run(query, [stats.upvotes || 0, stats.downvotes || 0, score, noteId]);
+    return {upvote_count:stats.upvotes||0,downvote_count:stats.downvotes||0,score};
   }
 
   /**
@@ -504,7 +514,7 @@ export class NoteRepository extends BaseRepository {
         .update({ favorite_count: count || 0 })
         .eq('id', noteId);
       if (error) throw error;
-      return;
+      return {favorite_count:count||0};
     }
 
     const count = await this.db.get(`
@@ -516,6 +526,33 @@ export class NoteRepository extends BaseRepository {
     `;
 
     await this.db.run(query, [count.total || 0, noteId]);
+    return {favorite_count:count.total||0};
+  }
+
+  async getUserEngagementForNotes(noteIds,userId){
+    const ids=[...new Set(noteIds||[])];
+    if(!ids.length)return new Map();
+    if(this.isSupabase){
+      const [voteResult,favoriteResult]=await Promise.all([
+        this.db.from('note_votes').select('note_id,vote_type').eq('user_id',userId).in('note_id',ids),
+        this.db.from('note_favorites').select('note_id').eq('user_id',userId).in('note_id',ids)
+      ]);
+      if(voteResult.error)throw voteResult.error;
+      if(favoriteResult.error)throw favoriteResult.error;
+      const result=new Map(ids.map(id=>[id,{userVote:null,isFavoritedByUser:false}]));
+      (voteResult.data||[]).forEach(row=>{result.get(row.note_id).userVote=row.vote_type;});
+      (favoriteResult.data||[]).forEach(row=>{result.get(row.note_id).isFavoritedByUser=true;});
+      return result;
+    }
+    const placeholders=ids.map(()=>'?').join(',');
+    const [votes,favorites]=await Promise.all([
+      this.db.all(`SELECT note_id, vote_type FROM note_votes WHERE user_id = ? AND note_id IN (${placeholders})`,[userId,...ids]),
+      this.db.all(`SELECT note_id FROM note_favorites WHERE user_id = ? AND note_id IN (${placeholders})`,[userId,...ids])
+    ]);
+    const result=new Map(ids.map(id=>[id,{userVote:null,isFavoritedByUser:false}]));
+    votes.forEach(row=>{result.get(row.note_id).userVote=row.vote_type;});
+    favorites.forEach(row=>{result.get(row.note_id).isFavoritedByUser=true;});
+    return result;
   }
 
   /**

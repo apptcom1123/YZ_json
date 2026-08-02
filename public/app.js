@@ -27,6 +27,7 @@ let activePublicNotesArticleId=null;
 let activePublicNotesSubscriptionId=null;
 let statsRequestVersion=0;
 const threadRealtimeSubscriptionIds=new Set();
+let threadRealtimeNoteId=null;
 let threadRefreshTimer=null;
 let notificationCache=[];
 let notificationFetchedAt=0;
@@ -37,6 +38,7 @@ let favoritesLoadPromise=null;
 const personalNoteCache=new Map();
 const PERSONAL_CONTENT_CACHE_TTL=60000;
 const pendingEngagementActions=new Set();
+let personalCacheUserId=null;
 let notificationStatsTimer=null;
 const notificationRealtimeQueue=new Map();
 let notificationRenderFrame=null;
@@ -115,6 +117,14 @@ function scheduleAccountStateRefresh(authState){
 
 async function refreshAccountState({isLoggedIn,user}={},version=accountRefreshVersion){
   const userId=isLoggedIn ? user?.id : null;
+  if(userId!==personalCacheUserId){
+    personalCacheUserId=userId;
+    favoritesCache=[];
+    favoritesFetchedAt=0;
+    notificationCache=[];
+    notificationFetchedAt=0;
+    personalNoteCache.clear();
+  }
   if(!userId){
     renderNotes();
     renderDivinations();
@@ -975,6 +985,15 @@ function flattenReplies(replies,depth=0){
   return flattened;
 }
 
+function findReplyById(replies,replyId){
+  for(const reply of replies||[]){
+    if(reply.id===replyId)return reply;
+    const nested=findReplyById(reply.children,replyId);
+    if(nested)return nested;
+  }
+  return null;
+}
+
 function queueThreadReplyRealtimeUpdate(note,update){
   if(!update?.data?.id)return;
   const queued=threadReplyRealtimeQueue.get(update.data.id);
@@ -1171,9 +1190,9 @@ function renderThreadContent(note){
           <span style="color:#999;font-size:0.85rem"> · ${new Date(note.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
-          <button class="thread-vote" data-note-id="${note.id}" data-vote="up" style="background:none;border:none;cursor:pointer">▲ ${note.upvote_count||0}</button>
-          <button class="thread-vote" data-note-id="${note.id}" data-vote="down" style="background:none;border:none;cursor:pointer">▼ ${note.downvote_count||0}</button>
-          <button class="thread-favorite" data-note-id="${note.id}" style="background:none;border:none;cursor:pointer">✦ ${note.favorite_count||0}</button>
+          <button class="thread-vote" data-note-id="${note.id}" data-vote="up" aria-pressed="${note.userVote==='up'}" style="background:none;border:none;cursor:pointer;color:${note.userVote==='up'?'#963b2e':'inherit'}">▲ ${note.upvote_count||0}</button>
+          <button class="thread-vote" data-note-id="${note.id}" data-vote="down" aria-pressed="${note.userVote==='down'}" style="background:none;border:none;cursor:pointer;color:${note.userVote==='down'?'#963b2e':'inherit'}">▼ ${note.downvote_count||0}</button>
+          <button class="thread-favorite" data-note-id="${note.id}" aria-pressed="${Boolean(note.isFavoritedByUser)}" style="background:none;border:none;cursor:pointer;color:${note.isFavoritedByUser?'#963b2e':'inherit'}">✦ ${note.favorite_count||0}</button>
           ${canEditNote?`<button class="thread-edit-note" type="button" style="background:none;border:none;cursor:pointer">編輯</button>`:''}
         </div>
       </div>
@@ -1193,8 +1212,9 @@ function renderThreadContent(note){
           <span style="color:#999;font-size:0.85rem"> &middot; ${new Date(r.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
-          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" aria-label="讚" title="讚" style="background:none;border:none;cursor:pointer">&#9650; ${r.upvote_count||0}</button>
-          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" aria-label="不讚" title="不讚" style="background:none;border:none;cursor:pointer">&#9660; ${r.downvote_count||0}</button>
+          ${r._pending?'<span style="color:#888;font-size:0.8rem">送出中</span>':`
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" aria-label="讚" aria-pressed="${r.userVote==='up'}" title="讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='up'?'#963b2e':'inherit'}">&#9650; ${r.upvote_count||0}</button>
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" aria-label="不讚" aria-pressed="${r.userVote==='down'}" title="不讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='down'?'#963b2e':'inherit'}">&#9660; ${r.downvote_count||0}</button>`}
         </div>
       </div>
       <p style="color:#666;line-height:1.5;margin:8px 0">${esc(r.content)}</p>
@@ -1224,16 +1244,10 @@ function renderThreadContent(note){
       openAnnotationModal(localNote);
     };
   }
-  if(typeof realtimeClient !== 'undefined'){
-    const refreshRepliesLegacy=async()=>{
-      try{
-        const response=await api.getNoteReplies(note.id);
-        note.replies=response.replies||[];
-        renderThreadContent(note);
-      }catch(err){
-        console.warn('無法同步最新回覆:',err);
-      }
-    };
+  if(typeof realtimeClient !== 'undefined'&&threadRealtimeNoteId!==note.id){
+    [...threadRealtimeSubscriptionIds].forEach(id=>realtimeClient.unsubscribe(id).catch(()=>{}));
+    threadRealtimeSubscriptionIds.clear();
+    threadRealtimeNoteId=note.id;
     const refreshReplies=update=>{
       queueThreadReplyRealtimeUpdate(note,update);
       clearTimeout(threadRefreshTimer);
@@ -1246,16 +1260,7 @@ function renderThreadContent(note){
         }catch(err){
           console.warn('Reply refresh failed:',err);
         }
-      },120);
-    };
-    const refreshNote=async()=>{
-      try{
-        const response=await api.getNote(note.id);
-        Object.assign(note,response?.note||response);
-        renderThreadContent(note);
-      }catch(err){
-        console.warn('無法同步最新投票或收藏:',err);
-      }
+      },600);
     };
     threadRealtimeSubscriptionIds.add(realtimeClient.subscribeToReplies(note.id,refreshReplies));
     // 開啟討論串後立即監聽內容、投票與收藏計數，不必先互動才開始同步。
@@ -1306,7 +1311,7 @@ function renderThreadContent(note){
         return;
       }
 
-      const reply=flattenReplies(note.replies||[]).find(item=>item.id===btn.dataset.replyId);
+      const reply=findReplyById(note.replies,btn.dataset.replyId);
       if(!reply)return;
       const actionKey=`reply-vote:${reply.id}`;
       if(pendingEngagementActions.has(actionKey))return;
@@ -1353,7 +1358,7 @@ function renderThreadContent(note){
         favoritesFetchedAt=0;
         renderThreadContent(note);
 
-        toast('已收藏');
+        toast(result.isFavorited?'已收藏':'已取消收藏');
       }catch(err){
         console.error('收藏失敗:',err);
         Object.assign(note,snapshot);
@@ -1380,6 +1385,7 @@ function closeThreadModal(){
     [...threadRealtimeSubscriptionIds].forEach(id=>realtimeClient.unsubscribe(id).catch(()=>{}));
   }
   threadRealtimeSubscriptionIds.clear();
+  threadRealtimeNoteId=null;
   window.threadData=null;
 }
 
@@ -1464,11 +1470,16 @@ async function handleVote(noteId,voteType){
     toast('請先登入');
     return;
   }
+  const note=personalNoteCache.get(noteId)?.note
+    ||Object.values(window.publicNotesByArticle||{}).flat().find(item=>item.id===noteId);
+  const snapshot=note?applyOptimisticVote(note,voteType):null;
+  toast(voteType==='up'?'已按讚':'已倒讚');
   try{
-    await api.voteNote(noteId,voteType);
-    toast(voteType==='up'?'已按讚':'已倒讚');
+    const result=await api.voteNote(noteId,voteType);
+    if(note){Object.assign(note,result.note);note.userVote=result.userVote??note.userVote;}
   }catch(err){
     console.error('投票失敗:',err);
+    if(note&&snapshot)Object.assign(note,snapshot);
     toast('投票失敗');
   }
 }
@@ -1478,11 +1489,21 @@ async function handleFavorite(noteId){
     toast('請先登入');
     return;
   }
+  const note=personalNoteCache.get(noteId)?.note
+    ||Object.values(window.publicNotesByArticle||{}).flat().find(item=>item.id===noteId);
+  const snapshot=note?{favorite_count:Number(note.favorite_count)||0,isFavoritedByUser:Boolean(note.isFavoritedByUser)}:null;
+  if(note){
+    note.isFavoritedByUser=!snapshot.isFavoritedByUser;
+    note.favorite_count=Math.max(0,snapshot.favorite_count+(note.isFavoritedByUser?1:-1));
+  }
+  toast(note?.isFavoritedByUser===false?'已取消收藏':'已收藏');
   try{
-    await api.toggleFavorite(noteId);
-    toast('已收藏');
+    const result=await api.toggleFavorite(noteId);
+    if(note){Object.assign(note,result.note);note.isFavoritedByUser=result.isFavorited;}
+    favoritesFetchedAt=0;
   }catch(err){
     console.error('收藏失敗:',err);
+    if(note&&snapshot)Object.assign(note,snapshot);
     toast('收藏失敗');
   }
 }
@@ -2314,6 +2335,7 @@ function articleHash(articleId=''){
 async function prefetchPersonalNote(noteId){
   if(!noteId)return null;
   const cached=personalNoteCache.get(noteId);
+  if(cached?.promise)return cached.promise;
   if(cached&&Date.now()-cached.fetchedAt<PERSONAL_CONTENT_CACHE_TTL){
     queueThreadPrefetch([cached.note]);
     return cached.note;
@@ -2399,7 +2421,7 @@ async function loadNotificationsListLegacy(){
 
 function notificationItemHTML(notif){
   const title=notif.type==='reply'?'有人回覆了你的註記':'系統通知';
-  return `<div class="notification-item" data-notification-id="${esc(notif.id)}" style="padding:12px;border-bottom:1px solid #eee;cursor:pointer;background:${notif.read_at?'#fff':'#f9f9f9'}" onclick="navigateToNotification('${esc(notif.id)}','${esc(notif.note_id||notif.target_id||'')}')">
+  return `<div class="notification-item" data-notification-id="${esc(notif.id)}" data-note-id="${esc(notif.note_id||notif.target_id||'')}" style="padding:12px;border-bottom:1px solid #eee;cursor:pointer;background:${notif.read_at?'#fff':'#f9f9f9'}" onclick="navigateToNotification('${esc(notif.id)}','${esc(notif.note_id||notif.target_id||'')}')">
     <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:4px">
       <strong style="color:#333">${title}</strong>
       <span style="font-size:0.85rem;color:#999">${new Date(notif.created_at).toLocaleDateString('zh-TW')}</span>
@@ -2415,6 +2437,11 @@ function renderNotificationCache(){
   list.innerHTML=notificationCache.length
     ? notificationCache.map(notificationItemHTML).join('')
     : '<div style="padding:12px;text-align:center;color:#888">尚無通知</div>';
+  list.querySelectorAll('.notification-item').forEach(item=>{
+    const prefetch=()=>prefetchPersonalNote(item.dataset.noteId);
+    item.addEventListener('pointerenter',prefetch,{once:true,passive:true});
+    item.addEventListener('focusin',prefetch,{once:true});
+  });
 }
 
 async function loadNotificationsList(){

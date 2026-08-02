@@ -126,6 +126,21 @@ export class NoteReplyRepository extends BaseRepository {
     return this.buildReplyTree(replies);
   }
 
+  async getUserVotesForReplies(replyIds,userId){
+    const ids=[...new Set(replyIds||[])];
+    if(!ids.length)return new Map();
+    if(this.isSupabase){
+      const {data,error}=await this.db
+        .from('reply_votes')
+        .select('reply_id,vote_type')
+        .eq('user_id',userId)
+        .in('reply_id',ids);
+      if(error)throw error;
+      return new Map((data||[]).map(row=>[row.reply_id,row.vote_type]));
+    }
+    return new Map();
+  }
+
   /**
    * 構建回覆樹狀結構
    */
@@ -225,7 +240,9 @@ export class NoteReplyRepository extends BaseRepository {
         .maybeSingle();
       if (findError) throw findError;
 
+      let userVote=voteType;
       if (voteType === 'none' || existing?.vote_type === voteType) {
+        userVote=null;
         if (existing) {
           const { error } = await this.db
             .from('reply_votes')
@@ -248,8 +265,7 @@ export class NoteReplyRepository extends BaseRepository {
         if (error) throw error;
       }
 
-      await this.updateReplyScore(replyId);
-      return;
+      return {...(await this.updateReplyScore(replyId)),userVote};
     }
 
     const query = `
@@ -257,7 +273,9 @@ export class NoteReplyRepository extends BaseRepository {
       VALUES ((SELECT note_id FROM note_replies WHERE id = ?), ?, ?)
     `;
 
+    let userVote=voteType;
     if (voteType === 'none') {
+      userVote=null;
       const deleteQuery = `
         DELETE FROM note_votes 
         WHERE note_id = (SELECT note_id FROM note_replies WHERE id = ?)
@@ -269,7 +287,7 @@ export class NoteReplyRepository extends BaseRepository {
     }
 
     // 重新計算回覆的分數
-    await this.updateReplyScore(replyId);
+    return {...(await this.updateReplyScore(replyId)),userVote};
   }
 
   /**
@@ -277,19 +295,14 @@ export class NoteReplyRepository extends BaseRepository {
    */
   async updateReplyScore(replyId) {
     if (this.isSupabase) {
-      const { count: upvoteCount, error: upvoteError } = await this.db
-        .from('reply_votes')
-        .select('*', { count: 'exact', head: true })
-        .eq('reply_id', replyId)
-        .eq('vote_type', 'up');
-      if (upvoteError) throw upvoteError;
-
-      const { count: downvoteCount, error: downvoteError } = await this.db
-        .from('reply_votes')
-        .select('*', { count: 'exact', head: true })
-        .eq('reply_id', replyId)
-        .eq('vote_type', 'down');
-      if (downvoteError) throw downvoteError;
+      const [upvoteResult,downvoteResult]=await Promise.all([
+        this.db.from('reply_votes').select('*',{count:'exact',head:true}).eq('reply_id',replyId).eq('vote_type','up'),
+        this.db.from('reply_votes').select('*',{count:'exact',head:true}).eq('reply_id',replyId).eq('vote_type','down')
+      ]);
+      if(upvoteResult.error)throw upvoteResult.error;
+      if(downvoteResult.error)throw downvoteResult.error;
+      const upvoteCount=upvoteResult.count||0;
+      const downvoteCount=downvoteResult.count||0;
 
       const { error } = await this.db
         .from('note_replies')
@@ -300,7 +313,7 @@ export class NoteReplyRepository extends BaseRepository {
         })
         .eq('id', replyId);
       if (error) throw error;
-      return;
+      return {upvote_count:upvoteCount,downvote_count:downvoteCount};
     }
 
     // 注：在實現中，我們將投票存在 note_votes 上
@@ -313,6 +326,7 @@ export class NoteReplyRepository extends BaseRepository {
 
     // 暫時不實現詳細計算，留作 TODO
     await this.db.run(query, [0, 0, replyId]);
+    return {upvote_count:0,downvote_count:0};
   }
 
   /**

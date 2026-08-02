@@ -7,6 +7,10 @@ import { requireAuth, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
+function flattenReplyTree(replies){
+  return (replies||[]).flatMap(reply=>[reply,...flattenReplyTree(reply.children)]);
+}
+
 /**
  * GET /api/notes/:noteId/replies
  * 獲取註記的所有回覆
@@ -25,6 +29,11 @@ router.get('/:noteId/replies', optionalAuth, async (req, res) => {
       });
     }
     const replies = await replyRepo.getNoteReplies(req.params.noteId);
+    if(req.user){
+      const flatReplies=flattenReplyTree(replies);
+      const votes=await replyRepo.getUserVotesForReplies(flatReplies.map(reply=>reply.id),req.user.userId);
+      flatReplies.forEach(reply=>{reply.userVote=votes.get(reply.id)||null;});
+    }
 
     res.json({
       noteId: req.params.noteId,
@@ -82,22 +91,14 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
       clientMutationId
     );
 
-    const reply = await replyRepo.findById(replyId);
-
-    // 如果是公開註記，通知原作者
-    if (note.visibility === 'public' && note.author_id !== req.user.userId) {
-      const shouldNotify = await notificationRepo.shouldNotifyUser(note.author_id);
-      if (shouldNotify) {
-        const deepLink = `/#${note.article_id}?note_id=${note.id}&reply_id=${replyId}`;
-        await notificationRepo.createReplyNotification(
-          note.author_id,
-          replyId,
-          req.user.userId,
-          note.id,
-          deepLink
-        );
-      }
-    }
+    const notificationTask=note.visibility==='public'&&note.author_id!==req.user.userId
+      ? notificationRepo.shouldNotifyUser(note.author_id).then(shouldNotify=>{
+          if(!shouldNotify)return null;
+          const deepLink=`/#${note.article_id}?note_id=${note.id}&reply_id=${replyId}`;
+          return notificationRepo.createReplyNotification(note.author_id,replyId,req.user.userId,note.id,deepLink);
+        })
+      : Promise.resolve(null);
+    const [reply]=await Promise.all([replyRepo.findById(replyId),notificationTask]);
 
     res.status(201).json({
       success: true,
@@ -127,14 +128,16 @@ router.post('/:noteId/replies/:replyId/vote', requireAuth, async (req, res) => {
     }
 
     const { reply: replyRepo, note: noteRepo } = req.app.locals.repositories;
-    const note = await noteRepo.findById(req.params.noteId);
+    const [note,reply]=await Promise.all([
+      noteRepo.findById(req.params.noteId),
+      replyRepo.findById(req.params.replyId)
+    ]);
     if (!note || note.status !== 'active' || note.deleted_at || (note.visibility !== 'public' && note.author_id !== req.user.userId)) {
       return res.status(403).json({
         error: 'IDENTITY_VERIFICATION_FAILED',
         message: '身分驗證失敗：無權對此留言投票'
       });
     }
-    const reply = await replyRepo.findById(req.params.replyId);
     if (!reply || reply.note_id !== req.params.noteId || reply.status !== 'active') {
       return res.status(404).json({
         error: 'REPLY_NOT_FOUND',
@@ -142,9 +145,9 @@ router.post('/:noteId/replies/:replyId/vote', requireAuth, async (req, res) => {
       });
     }
 
-    await replyRepo.voteReply(reply.id, req.user.userId, voteType);
-    const updatedReply = await replyRepo.findById(reply.id);
-    res.json({ success: true, reply: updatedReply });
+    const result=await replyRepo.voteReply(reply.id,req.user.userId,voteType);
+    const updatedReply={...reply,...result};
+    res.json({success:true,reply:updatedReply,userVote:result.userVote});
   } catch (error) {
     console.error('Vote reply error:', error);
     res.status(500).json({
