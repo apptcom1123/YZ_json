@@ -65,12 +65,35 @@ export class UserRepository extends BaseRepository {
   }
 
   async acceptTerms(userId, version, ipAddress = null, userAgent = null) {
-    const { error: deleteError } = await this.db.from('legal_consents').delete().eq('user_id', userId).eq('doc_type', 'terms');
+    const now = new Date().toISOString();
+    const { error: deleteError } = await this.db
+      .from('legal_consents')
+      .delete()
+      .eq('user_id', userId)
+      .eq('doc_type', 'terms')
+      .neq('doc_version', version);
     if (deleteError) throw deleteError;
-    const { error: consentError } = await this.db.from('legal_consents').insert({ user_id: userId, doc_type: 'terms', doc_version: version, ip_address: ipAddress, user_agent: userAgent });
+    const { error: consentError } = await this.db.from('legal_consents').upsert({
+      user_id: userId,
+      doc_type: 'terms',
+      doc_version: version,
+      accepted_at: now,
+      ip_address: ipAddress,
+      user_agent: userAgent
+    }, { onConflict: 'user_id,doc_type,doc_version' });
     if (consentError) throw consentError;
-    const { error: settingsError } = await this.db.from('user_settings').update({ terms_accepted: true, accepted_terms_version: version, terms_accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('user_id', userId);
+    const { data: settings, error: settingsError } = await this.db.from('user_settings').upsert({
+      user_id: userId,
+      terms_accepted: true,
+      accepted_terms_version: version,
+      terms_accepted_at: now,
+      updated_at: now
+    }, { onConflict: 'user_id' }).select('terms_accepted, accepted_terms_version, terms_accepted_at').single();
     if (settingsError) throw settingsError;
+    if (!settings?.terms_accepted || settings.accepted_terms_version !== version) {
+      throw new Error('TERMS_STATUS_NOT_UPDATED');
+    }
+    return settings;
   }
 
   async disableUser(userId, reason) {

@@ -66,15 +66,19 @@ class AuthManager {
   }
 
   async refreshAuthStatus() {
+    let response = null;
     try {
       const termsVersion = window.ICHING_TERMS_VERSION || '2026-07-26';
       const browserAccepted = localStorage.getItem('iching_terms_version') === termsVersion;
-      let response = await api.getAuthStatus();
+      response = await api.getAuthStatus();
 
       // The pre-login checkbox is recorded locally before OAuth. Once Google has
       // verified the user, use that authenticated session to persist the consent.
       if (response.requiresTerms && browserAccepted) {
-        await api.acceptTerms(termsVersion);
+        const accepted = await api.acceptTerms(termsVersion);
+        if (!accepted?.termsAccepted || accepted.acceptedVersion !== termsVersion) {
+          throw new Error('TERMS_STATUS_NOT_UPDATED');
+        }
         response = await api.getAuthStatus();
       }
 
@@ -82,8 +86,13 @@ class AuthManager {
       this.requiresTerms = Boolean(response.requiresTerms) || (Boolean(response.loggedIn) && !browserAccepted);
       this.isLoggedIn = Boolean(response.loggedIn) && browserAccepted && !this.requiresTerms;
       this.notifyListeners(); return response;
-    } catch (_) {
-      this.user = null; this.isLoggedIn = false; this.requiresTerms = false; this.notifyListeners(); return { loggedIn: false };
+    } catch (error) {
+      console.error('Authentication status refresh failed:', error);
+      this.user = response?.user || this.user || null;
+      this.isLoggedIn = false;
+      this.requiresTerms = Boolean(response?.requiresTerms && this.user);
+      this.notifyListeners();
+      return { loggedIn: false, requiresTerms: this.requiresTerms, user: this.user };
     }
   }
 

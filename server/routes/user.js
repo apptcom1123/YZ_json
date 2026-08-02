@@ -162,11 +162,14 @@ router.post('/terms/accept', requireSession, async (req, res) => {
     const userIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
 
-    await userRepo.acceptTerms(req.user.userId, docVersion, userIp, userAgent);
+    const termsStatus = await userRepo.acceptTerms(req.user.userId, docVersion, userIp, userAgent);
 
     res.json({
       success: true,
-      message: '已接受條款'
+      message: '已接受條款',
+      termsAccepted: termsStatus.terms_accepted,
+      acceptedVersion: termsStatus.accepted_terms_version,
+      acceptedAt: termsStatus.terms_accepted_at
     });
   } catch (error) {
     console.error('Accept terms error:', error);
