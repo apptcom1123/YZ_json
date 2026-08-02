@@ -7,6 +7,13 @@ import { optionalAuth, requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
+function canReadNote(note, userId = null) {
+  return Boolean(note
+    && note.status === 'active'
+    && !note.deleted_at
+    && (note.visibility === 'public' || note.author_id === userId));
+}
+
 /**
  * GET /api/notes?article_id=&paragraph_anchor=&cluster_key=&threshold_percent=
  * 獲取公開註記（可選過濾）
@@ -26,7 +33,7 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // 獲取公開註記
     let notes = paragraphAnchor === undefined
-      ? await noteRepo.getPublicNotesForArticle(articleId)
+      ? await noteRepo.getPublicNotesForArticle(articleId, thresholdPercent)
       : await noteRepo.getPublicNotesForParagraph(articleId, paragraphAnchor, thresholdPercent);
 
     // 為每條註記添加當前用戶的投票和收藏狀態
@@ -166,8 +173,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
     // 檢查權限
     if (note.visibility === 'private' && note.author_id !== req.user?.userId) {
       return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: '無法訪問私人註記'
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：非註記持有者本人'
       });
     }
 
@@ -209,8 +216,8 @@ router.patch('/:id', requireAuth, async (req, res) => {
 
     if (note.author_id !== req.user.userId) {
       return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: '無法編輯他人的註記'
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：非註記持有者本人'
       });
     }
 
@@ -273,8 +280,8 @@ router.delete('/:id', requireAuth, async (req, res) => {
   } catch (error) {
     if (error.message === 'NOT_NOTE_OWNER') {
       return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: '無法刪除他人的註記'
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：非註記持有者本人'
       });
     }
 
@@ -303,6 +310,14 @@ router.post('/:id/vote', requireAuth, async (req, res) => {
 
     const { note: noteRepo } = req.app.locals.repositories;
 
+    const targetNote = await noteRepo.findById(req.params.id);
+    if (!canReadNote(targetNote, req.user.userId)) {
+      return res.status(403).json({
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：無權對此註記投票'
+      });
+    }
+
     await noteRepo.vote(req.params.id, req.user.userId, voteType);
     const note = await noteRepo.findById(req.params.id);
 
@@ -330,12 +345,22 @@ router.post('/:id/favorite', requireAuth, async (req, res) => {
   try {
     const { note: noteRepo } = req.app.locals.repositories;
 
+    const targetNote = await noteRepo.findById(req.params.id);
+    if (!canReadNote(targetNote, req.user.userId)) {
+      return res.status(403).json({
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：無權收藏此註記'
+      });
+    }
+
     await noteRepo.toggleFavorite(req.params.id, req.user.userId);
     const isFavorited = await noteRepo.isFavoritedBy(req.params.id, req.user.userId);
+    const note = await noteRepo.findById(req.params.id);
 
     res.json({
       success: true,
-      isFavorited
+      isFavorited,
+      note
     });
   } catch (error) {
     console.error('Favorite error:', error);

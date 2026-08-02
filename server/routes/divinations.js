@@ -92,8 +92,8 @@ router.get('/:id', requireAuth, async (req, res) => {
 
     if (record.user_id !== req.user.userId) {
       return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: '無法訪問他人的占卜紀錄'
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：非占卜紀錄持有者本人'
       });
     }
 
@@ -139,8 +139,8 @@ router.patch('/:id', requireAuth, async (req, res) => {
   } catch (error) {
     if (error.message === 'NOT_RECORD_OWNER') {
       return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: '無法編輯他人的占卜紀錄'
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：非占卜紀錄持有者本人'
       });
     }
 
@@ -168,8 +168,8 @@ router.delete('/:id', requireAuth, async (req, res) => {
   } catch (error) {
     if (error.message === 'NOT_RECORD_OWNER') {
       return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: '無法刪除他人的占卜紀錄'
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：非占卜紀錄持有者本人'
       });
     }
 

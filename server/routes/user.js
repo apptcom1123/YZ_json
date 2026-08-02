@@ -14,6 +14,13 @@ function hasConfirmedCurrentEmail(req, confirmEmail) {
   return Boolean(entered && authenticatedEmail && entered === authenticatedEmail);
 }
 
+function emailConfirmMismatch(res) {
+  return res.status(400).json({
+    error: 'EMAIL_CONFIRM_MISMATCH',
+    message: '身分驗證失敗：請輸入目前登入帳號的 Gmail'
+  });
+}
+
 /**
  * GET /api/me/settings
  * 獲取當前用戶的設置
@@ -84,7 +91,13 @@ router.patch('/settings', requireAuth, async (req, res) => {
     // 轉換布爾值為 0/1
     const convertedUpdates = {};
     for (const [key, value] of Object.entries(updates)) {
-      const dbKey = keyMap[key] || key;
+      const dbKey = keyMap[key];
+      if (!dbKey) {
+        return res.status(400).json({ error: 'INVALID_SETTING', message: `不支援的設定：${key}` });
+      }
+      if (key === 'noteVisibilityThresholdPercent' && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 100)) {
+        return res.status(400).json({ error: 'INVALID_THRESHOLD', message: '公開註記顯示閾值必須介於 0 到 100' });
+      }
       if (typeof value === 'boolean') {
         convertedUpdates[dbKey] = value ? 1 : 0;
       } else {
@@ -270,10 +283,7 @@ router.post('/data/delete', requireAuth, async (req, res) => {
 
     // 驗證郵件地址
     if (!hasConfirmedCurrentEmail(req, confirmEmail)) {
-      return res.status(400).json({
-        error: 'EMAIL_CONFIRM_MISMATCH',
-        message: '郵件地址不符'
-      });
+      return emailConfirmMismatch(res);
     }
 
     // 創建刪除審計日誌
@@ -380,10 +390,7 @@ router.post('/account/delete', requireAuth, async (req, res) => {
 
     // 驗證郵件地址
     if (!hasConfirmedCurrentEmail(req, confirmEmail)) {
-      return res.status(400).json({
-        error: 'EMAIL_CONFIRM_MISMATCH',
-        message: '郵件地址不符'
-      });
+      return emailConfirmMismatch(res);
     }
 
     // 創建刪除審計日誌
@@ -425,10 +432,7 @@ router.post('/account/delete', requireAuth, async (req, res) => {
  */
 router.post('/local-data/clear', requireAuth, (req, res) => {
   if (!hasConfirmedCurrentEmail(req, req.body.confirmEmail)) {
-    return res.status(400).json({
-      error: 'EMAIL_CONFIRM_MISMATCH',
-      message: 'Identity verification failed: enter the current Google account email.'
-    });
+    return emailConfirmMismatch(res);
   }
   res.json({
     success: true,

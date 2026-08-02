@@ -10,9 +10,39 @@ const $=(selector)=>document.querySelector(selector);
 const reader=$('#reader'),list=$('#hexagram-list'),search=$('#search'),count=$('#result-count');
 
 function currentUserId(){ return authManager?.getCurrentUser?.()?.id || null; }
+const DEFAULT_USER_SETTINGS={
+  saveNotesToCloud:false,
+  saveDivinationToCloud:false,
+  allowPublicNotes:false,
+  noteVisibilityThresholdPercent:50,
+  notifyOnReply:true
+};
+
+function applySettingsToControls(settings=DEFAULT_USER_SETTINGS){
+  if($('#settings-save-notes'))$('#settings-save-notes').checked=Boolean(settings.saveNotesToCloud);
+  if($('#settings-save-divinations'))$('#settings-save-divinations').checked=Boolean(settings.saveDivinationToCloud);
+  if($('#settings-public-notes'))$('#settings-public-notes').checked=Boolean(settings.allowPublicNotes);
+  if($('#settings-notify-replies'))$('#settings-notify-replies').checked=settings.notifyOnReply!==false;
+  const threshold=$('#settings-threshold');
+  const thresholdValue=Number(settings.noteVisibilityThresholdPercent ?? 50);
+  if(threshold){
+    threshold.value=thresholdValue;
+    threshold.dataset.savedValue=String(thresholdValue);
+  }
+  if($('#settings-threshold-value'))$('#settings-threshold-value').textContent=thresholdValue+'%';
+}
+
+function setCloudSettingsDisabled(disabled){
+  ['#settings-save-notes','#settings-save-divinations','#settings-public-notes','#settings-threshold','#settings-notify-replies']
+    .forEach(selector=>{const control=$(selector);if(control)control.disabled=disabled;});
+}
+
 function canAccessLocalNote(note){
   const userId=currentUserId();
-  return note.ownerId ? note.ownerId===userId : !userId;
+  return note.ownerId ? note.ownerId===userId : true;
+}
+function canAccessLocalDivination(record){
+  return record.ownerId ? record.ownerId===currentUserId() : !record.serverId;
 }
 function localNotesForDocument(doc){
   return state.notes.filter(note=>note.doc===doc&&canAccessLocalNote(note));
@@ -54,6 +84,7 @@ function bindUI(){
   });
   $('#close-annotation').onclick=closeAnnotationModal; $('#cancel-annotation').onclick=closeAnnotationModal;
   $('#annotation-form').onsubmit=submitAnnotation;
+  bindDangerZoneButtons();
   
   // 占卜功能綁定
   $('#divination-fab').onclick=openDivinationModal;
@@ -86,6 +117,7 @@ function bindUI(){
       else if(tabName==='favorites')loadFavoritesList();
       else if(tabName==='notifications')loadNotificationsList();
       else if(tabName==='settings')initializeSettings();
+      if(tabName==='settings')bindDangerZoneButtons();
     };
   });
   
@@ -160,10 +192,9 @@ function bindUI(){
           if(user){
             const result=await api.updateProfile({displayName:newNickname});
             user.displayName=result.user.displayName;
-            // 保存到 localStorage
-            
+            authManager.notifyListeners();
+
             // 更新 UI
-            $('#user-nickname').textContent=newNickname;
             $('#nickname-edit-form').style.display='none';
             toast('暱稱已更新');
             
@@ -300,22 +331,41 @@ async function submitAnnotation(event){
   if(state.editingId){
     const note=state.notes.find(n=>n.id===state.editingId);
     if(note){
-      note.comment=comment;
-      note.visibility=visibility;
-      // 如果改為 public，嘗試同步到 API
+      if(!canAccessLocalNote(note)){
+        toast('身分驗證失敗：非使用者本人');
+        return;
+      }
+      // 公開內容或既有雲端內容必須先通過後端本人驗證，成功後才改本地狀態。
       if((visibility==='public'||note.serverId)&&typeof api!=='undefined'&&authManager.isLoggedIn){
         try{
-          await api.updateNote(note.serverId||note.id,{content:comment,visibility});
+          if(note.serverId){
+            await api.updateNote(note.serverId,{content:comment,visibility});
+          }else{
+            const result=await api.createNote({
+              articleType:note.doc?.startsWith('gua-')?'iching':'md',
+              articleId:note.doc,
+              paragraphAnchor:String(note.start||0),
+              anchorOffsetStart:note.start||0,
+              anchorOffsetEnd:note.end||0,
+              content:comment,
+              visibility,
+              localUuid:note.id
+            });
+            note.serverId=result.note?.id;
+          }
         }catch(err){
-          console.warn('無法同步公開註記到伺服器:',err);
+          console.warn('無法同步註記到伺服器:',err);
+          toast(err.message||'公開註解儲存失敗');
+          return;
         }
       }
+      note.comment=comment;
+      note.visibility=visibility;
     }
   }
   else if(state.pending){
     const newNote={...state.pending,comment,visibility,id:crypto.randomUUID?.()||String(Date.now()),ownerId:currentUserId()||null};
-    state.notes.push(newNote);
-    // 如果是 public 註記且已登入，發送到 API
+    // 公開註記先完成雲端建立，避免失敗後留下「假公開」本地資料。
     if(visibility==='public'&&typeof api!=='undefined'&&authManager.isLoggedIn){
       try{
         const result=await api.createNote({
@@ -325,16 +375,20 @@ async function submitAnnotation(event){
           anchorOffsetStart:state.pending.start||0,
           anchorOffsetEnd:state.pending.end||0,
           content:comment,
-          visibility:'public'
+          visibility:'public',
+          localUuid:newNote.id
         });
         newNote.serverId=result.note?.id;
       }catch(err){
         console.warn('無法保存公開註記到伺服器:',err);
+        toast(err.message||'公開註解儲存失敗');
+        return;
       }
     }
+    state.notes.push(newNote);
   }
   saveNotes();getSelection()?.removeAllRanges();state.pending=null;state.editingId=null;$('#annotation-modal').hidden=true;$('#highlight-action').hidden=true;
-  applyHighlights();if(!$('#notes-panel').hidden)renderNotes();toast('註解已保存在此裝置');navigator.vibrate?.(35);
+  applyHighlights();if(!$('#notes-panel').hidden)renderNotes();toast(visibility==='public'?'公開註解已儲存':'註解已保存在此裝置');navigator.vibrate?.(35);
 }
 
 function applyHighlights(){
@@ -362,15 +416,26 @@ function applyHighlights(){
 
 async function loadPublicNotesForPage(articleId){
   try{
+    // 即使目前沒有公開註記，也要先訂閱，才能收到其他人新增的第一筆資料。
+    if(typeof realtimeClient !== 'undefined'&&realtimeClient.isEnabled){
+      realtimeClient.subscribeToNotes(articleId,update=>{
+        if(['INSERT','UPDATE','DELETE'].includes(update.event)){
+          loadPublicNotesForPage(articleId);
+        }
+      });
+    }
+
     // 讀取用戶設置的閾值
     let thresholdPercent=50;
-    try{
+    if(authManager?.isLoggedIn){
+      try{
       const settings=await api.getUserSettings();
       if(settings&&settings.settings){
         thresholdPercent=settings.settings.noteVisibilityThresholdPercent ?? 50;
       }
-    }catch(err){
-      console.warn('無法讀取閾值設定，使用默認值');
+      }catch(err){
+        console.warn('無法讀取閾值設定，使用默認值');
+      }
     }
     
     // 從伺服器加載公開註記，應用用戶設置的閾值
@@ -378,47 +443,30 @@ async function loadPublicNotesForPage(articleId){
     if(!response.ok)return;
     
     const data=await response.json();
-    if(!data.notes||!data.notes.length)return;
-    
     const root=$('.annotatable');if(!root||root.dataset.doc!==articleId)return;
+    const notes=Array.isArray(data.notes)?data.notes:[];
     
     // 儲存公開註記到全局狀態供討論串使用
     if(!window.publicNotesByArticle)window.publicNotesByArticle={};
-    window.publicNotesByArticle[articleId]=data.notes;
+    window.publicNotesByArticle[articleId]=notes;
     
     // 將公開註記轉換為 entries 格式並計算 cluster
-    const publicEntries=data.notes.map(note=>({
+    const publicEntries=notes.map(note=>({
       note:{...note,visibility:'public',id:note.id,doc:articleId,start:note.anchor_offset_start,end:note.anchor_offset_end,comment:note.content},
       range:rangeFromOffsets(root,note.anchor_offset_start,note.anchor_offset_end),
       type:'public',
       clusterId:Math.floor(note.anchor_offset_start/5)
     })).filter(x=>x.range);
     
-    if(!publicEntries.length)return;
-    
     // 設置公開註記高亮
     if(CSS.highlights&&window.Highlight){
-      CSS.highlights.set('public-notes',new Highlight(...publicEntries.map(x=>x.range)));
+      CSS.highlights.delete('public-notes');
+      if(publicEntries.length)CSS.highlights.set('public-notes',new Highlight(...publicEntries.map(x=>x.range)));
     }
     
     // 與私人註記一起渲染所有氣泡
     const privateEntries=localNotesForDocument(root.dataset.doc).filter(n=>n.visibility!=='public'||!n.serverId).map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:Math.floor(n.start/5)})).filter(x=>x.range);
     renderBubbles([...privateEntries,...publicEntries]);
-    
-    // 訂閱 Realtime 更新
-    if(typeof realtimeClient !== 'undefined' && realtimeClient.isEnabled){
-      const subscriptionId=realtimeClient.subscribeToNotes(articleId,(update)=>{
-        if(update.event==='INSERT'||update.event==='UPDATE'||update.event==='DELETE'){
-          console.log('✓ Realtime 更新:',update.event);
-          // 重新加載註記
-          loadPublicNotesForPage(articleId);
-        }
-      });
-      
-      // 記錄訂閱以便稍後清理
-      if(!window.realtimeSubscriptions)window.realtimeSubscriptions=[];
-      window.realtimeSubscriptions.push(subscriptionId);
-    }
   }catch(err){
     console.warn('無法加載公開註記:',err);
   }
@@ -553,11 +601,6 @@ function orderedReplies(replies, sortBy='best'){
 }
 
 async function openThreadModal(cluster){
-  if(!authManager.isLoggedIn){
-    toast('請先登入');
-    return;
-  }
-  
   cluster.splice(0,cluster.length,...orderedThreadCluster(cluster));
   window.threadData={cluster,currentIndex:0,replySort:'best'};
   const modal=$('#thread-modal');
@@ -574,22 +617,19 @@ async function openThreadModal(cluster){
   
   // 添加排序選項到 thread-content 頂部
   const contentDiv=$('#thread-content');
-  if(!contentDiv.querySelector('.thread-sort-options')){
+  if(!modal.querySelector('.thread-sort-options')){
     const sortHTML=`
       <div class="thread-sort-options" style="padding:12px;border-bottom:1px solid #ddd;background:#f9f9f9;display:flex;gap:8px;align-items:center">
-        <span style="font-size:0.85rem;color:#999">排序：</span>
-        <button class="thread-sort-btn" data-sort="newest" style="padding:4px 12px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;font-size:0.85rem;border-color:#963b2e;color:#963b2e">最新</button>
-        <button class="thread-sort-btn" data-sort="hot" style="padding:4px 12px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;font-size:0.85rem">熱門</button>
+        <span style="font-size:0.85rem;color:#999">&#22238;&#35206;&#25490;&#24207;</span>
+        <button class="thread-sort-btn" data-sort="hot" style="padding:4px 12px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;font-size:0.85rem;border-color:#963b2e;color:#963b2e">&#26368;&#20339;</button>
+        <button class="thread-sort-btn" data-sort="newest" style="padding:4px 12px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;font-size:0.85rem">&#26368;&#26032;</button>
       </div>
     `;
     contentDiv.insertAdjacentHTML('beforebegin',sortHTML);
     
     // 綁定排序按鈕事件
     const sortBtns=modal.querySelectorAll('.thread-sort-btn');
-    const latestReplySort=modal.querySelector('[data-sort="newest"]');
     const bestReplySort=modal.querySelector('[data-sort="hot"]');
-    bestReplySort.textContent='最佳';
-    latestReplySort.style.borderColor=latestReplySort.style.color='#ddd';
     bestReplySort.style.borderColor=bestReplySort.style.color='#963b2e';
     sortBtns.forEach(btn=>{
       btn.onclick=()=>{
@@ -637,7 +677,7 @@ async function openThreadModal(cluster){
       toast('請先登入');
       return;
     }
-    
+
     try{
       const currentNote=cluster[window.threadData.currentIndex].note;
       const result=await api.addReply(currentNote.id,text);
@@ -688,23 +728,23 @@ function renderThreadContent(note){
   `;
   
   // 回覆列表
-  const repliesHTML=orderedReplies(note.replies||[],window.threadData?.replySort).map((r,i)=>`
+  const replies=orderedReplies(note.replies||[],window.threadData?.replySort);
+  const repliesHTML=replies.length ? replies.map((r,i)=>`
     <div style="padding:12px;padding-left:32px;border-bottom:1px solid #eee;background:#fafafa">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
-          <strong style="color:#555">${esc(r.public_alias||'匿名使用者')}</strong>
-          <span style="color:#999;font-size:0.85rem"> · ${new Date(r.created_at).toLocaleDateString('zh-TW')}</span>
+          <strong style="color:#555">${esc(r.public_alias||'\u533f\u540d\u4f7f\u7528\u8005')}</strong>
+          <span style="color:#999;font-size:0.85rem"> &middot; ${new Date(r.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
-          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" style="background:none;border:none;cursor:pointer">👍 ${r.upvote_count||0}</button>
-          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" style="background:none;border:none;cursor:pointer">👎 ${r.downvote_count||0}</button>
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" style="background:none;border:none;cursor:pointer">&#35738; ${r.upvote_count||0}</button>
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" style="background:none;border:none;cursor:pointer">&#20498;&#35738; ${r.downvote_count||0}</button>
         </div>
       </div>
       <p style="color:#666;line-height:1.5;margin:8px 0">${esc(r.content)}</p>
     </div>
-  `).join('');
-  
-  container.innerHTML=mainHTML+repliesHTML;
+  `).join('') : '<div style="padding:16px;text-align:center;color:#888;background:#fafafa">&#23578;&#28961;&#22238;&#35206;</div>';
+    container.innerHTML=mainHTML+repliesHTML;
   const editButton=container.querySelector('.thread-edit-note');
   if(editButton){
     editButton.onclick=()=>{
@@ -736,6 +776,13 @@ function renderThreadContent(note){
         renderThreadContent(note);
       }catch(err){
         console.warn('無法同步最新回覆:',err);
+      }
+    });
+    // 開啟討論串後立即監聽內容、投票與收藏計數，不必先互動才開始同步。
+    realtimeClient.subscribeToNoteChanges('engagement',note.id,update=>{
+      if(update.data){
+        Object.assign(note,update.data);
+        renderThreadContent(note);
       }
     });
   }
@@ -881,7 +928,7 @@ function renderNotes(){
   }
   
   box.innerHTML=notes.slice().reverse().map(n=>`
-    <article class="note-item" data-note-id="${n.id}">
+    <article class="note-item note-item-${n.visibility==='public'?'public':'private'}" data-note-id="${n.id}">
       <div class="note-meta">
         <span>${notePageName(n.doc)}${n.visibility==='public'?' · 公開':'·私人'}</span>
         <span class="note-actions">
@@ -894,13 +941,22 @@ function renderNotes(){
     </article>
   `).join('');
   
-  box.onclick=e=>{
+  box.onclick=async e=>{
     const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');
     
     if(edit){const note=state.notes.find(n=>n.id===edit.dataset.edit&&canAccessLocalNote(n));if(note)openAnnotationModal(note);}
     if(del){
       const note=state.notes.find(n=>n.id===del.dataset.delete&&canAccessLocalNote(n));
       if(!note){toast('身分驗證失敗：非使用者本人');return;}
+      if(note.serverId){
+        if(!authManager.isLoggedIn){toast('身分驗證失敗：請先登入目前瀏覽器的帳號');return;}
+        try{
+          await api.deleteNote(note.serverId);
+        }catch(err){
+          toast(err.message||'刪除註記失敗');
+          return;
+        }
+      }
       state.notes=state.notes.filter(n=>n.id!==note.id);saveNotes();renderNotes();applyHighlights();
     }
   };
@@ -1131,6 +1187,7 @@ function showDivinationResult(result){
 async function saveDivinationResult(){
   if(!state.currentDivinationResult)return;
   const record=state.currentDivinationResult;
+  record.ownerId=currentUserId()||null;
   if(authManager.isLoggedIn){
     try{
       const settingsResponse=await api.getUserSettings();
@@ -1166,7 +1223,10 @@ function saveDivinations(){
 
 function openEditDivinationModal(index){
   const divination=state.divinations[index];
-  if(!divination)return;
+  if(!divination||!canAccessLocalDivination(divination)){
+    toast('身分驗證失敗：非使用者本人');
+    return;
+  }
   state.editingDivinationIndex=index;
   $('#edit-divination-question').value=divination.question;
   $('#edit-divination-modal').hidden=false;
@@ -1180,13 +1240,27 @@ function closeEditDivinationModal(){
   if($('#notes-panel').hidden)$('#backdrop').hidden=true;
 }
 
-function submitEditDivination(event){
+async function submitEditDivination(event){
   event.preventDefault();
   const question=$('#edit-divination-question').value.trim();
   if(!question)return;
   
   if(state.editingDivinationIndex!==null){
-    state.divinations[state.editingDivinationIndex].question=question;
+    const record=state.divinations[state.editingDivinationIndex];
+    if(!record||!canAccessLocalDivination(record)){
+      toast('身分驗證失敗：非使用者本人');
+      return;
+    }
+    if(record.serverId){
+      if(!authManager.isLoggedIn){toast('身分驗證失敗：請先登入目前瀏覽器的帳號');return;}
+      try{
+        await api.updateDivination(record.serverId,question,record.result);
+      }catch(err){
+        toast(err.message||'更新占卜紀錄失敗');
+        return;
+      }
+    }
+    record.question=question;
     saveDivinations();
     renderDivinations();
     toast('占卜紀錄已更新');
@@ -1197,8 +1271,8 @@ function submitEditDivination(event){
 
 function renderDivinations(){
   const box=$('#divinations-list');
-  box.innerHTML=state.divinations.length?state.divinations.slice().reverse().map((d,reverseIdx)=>{
-    const actualIdx=state.divinations.length-1-reverseIdx;
+  const visibleDivinations=state.divinations.map((record,index)=>({record,index})).filter(item=>canAccessLocalDivination(item.record));
+  box.innerHTML=visibleDivinations.length?visibleDivinations.slice().reverse().map(({record:d,index:actualIdx})=>{
     
     // 安全檢查 d.result 結構
     if(!d.result||!d.result.originalHexagram||!d.result.resultHexagram){
@@ -1256,7 +1330,7 @@ function renderDivinations(){
     </article>`;
   }).join(''):'<p class="empty">尚未進行占卜。</p>';
   
-  box.onclick=e=>{
+  box.onclick=async e=>{
     const edit=e.target.closest('[data-edit-divination]');
     const del=e.target.closest('[data-delete-divination]');
     if(edit){
@@ -1265,6 +1339,12 @@ function renderDivinations(){
     }
     if(del){
       const timestamp=parseInt(del.dataset.deleteDivination);
+      const record=state.divinations.find(d=>d.timestamp===timestamp&&canAccessLocalDivination(d));
+      if(!record){toast('身分驗證失敗：非使用者本人');return;}
+      if(record.serverId){
+        if(!authManager.isLoggedIn){toast('身分驗證失敗：請先登入目前瀏覽器的帳號');return;}
+        try{await api.deleteDivination(record.serverId);}catch(err){toast(err.message||'刪除占卜紀錄失敗');return;}
+      }
       state.divinations=state.divinations.filter(d=>d.timestamp!==timestamp);
       saveDivinations();
       renderDivinations();
@@ -1276,28 +1356,43 @@ function renderDivinations(){
 function updateAuthUI(){
   const authContainer=$('#auth-container');
   if(!authContainer)return;
-  
-  const signedIn=typeof authManager !== 'undefined'&&authManager.isLoggedIn&&authManager.getCurrentUser?.();
+
+  const loginButton=$('#login-button');
+  const userMenu=$('#user-menu');
+  const userMenuToggle=$('#user-menu-toggle');
+  const userNickname=$('#user-nickname');
+  const settingsAccount=$('#settings-account');
+  const user=typeof authManager !== 'undefined' ? authManager.getCurrentUser?.() : null;
+  const signedIn=Boolean(typeof authManager !== 'undefined'&&authManager.isLoggedIn&&user);
+
   if(signedIn){
     // 已登入 - 顯示用戶菜單
-    $('#login-button').style.display='none';
-    $('#user-menu').style.display='flex';
-    
-    const user=authManager.getCurrentUser();
-    if(user){
-      const nickname=user.displayName||user.email||'使用者';
-      $('#user-nickname').textContent=nickname;
-      $('#user-menu-toggle').textContent=nickname.trim().slice(0,1).toUpperCase()||'●';
-      $('#user-menu-toggle').setAttribute('aria-label',`${nickname} 的用戶選單`);
-      
-      // 加載統計數據
-      loadUserStats();
+    if(loginButton)loginButton.style.display='none';
+    if(userMenu)userMenu.style.display='flex';
+
+    const nickname=user.displayName||user.email||'使用者';
+    if(userNickname)userNickname.textContent=nickname;
+    if(userMenuToggle){
+      userMenuToggle.textContent=nickname.trim().slice(0,1).toUpperCase()||'●';
+      userMenuToggle.setAttribute('aria-label',`${nickname} 的用戶選單`);
     }
+    if(settingsAccount)settingsAccount.textContent=user.email||'未知';
+    setCloudSettingsDisabled(false);
+
+    // 加載統計數據
+    loadUserStats();
   }else{
     // 未登入 - 顯示登入按鈕
-    $('#login-button').style.display='block';
-    $('#user-menu').style.display='none';
-    $('#user-menu-toggle').textContent='●';
+    if(loginButton)loginButton.style.display='block';
+    if(userMenu)userMenu.style.display='none';
+    if(userMenuToggle){
+      userMenuToggle.textContent='●';
+      userMenuToggle.setAttribute('aria-label','登入');
+    }
+    if(userNickname)userNickname.textContent='';
+    if(settingsAccount)settingsAccount.textContent='尚未登入';
+    applySettingsToControls();
+    setCloudSettingsDisabled(true);
     closeUserMenu();
   }
 }
@@ -1306,7 +1401,7 @@ function loadUserStats(){
   // 加載用戶統計數據
   try{
     // 本地統計
-    const notesCount=state.notes.length;
+    const notesCount=state.notes.filter(canAccessLocalNote).length;
     
     $('#stat-notes-count').textContent=notesCount;
     
@@ -1331,13 +1426,6 @@ function loadUserStats(){
 function closeUserMenu(){
   const dropdown=$('#user-menu-dropdown');
   if(dropdown)dropdown.hidden=true;
-}
-
-// 監聽認證狀態變化
-if(typeof authManager !== 'undefined'){
-  authManager.onAuthChange(()=>{
-    updateAuthUI();
-  });
 }
 
 let pendingTermsSessionToken = null;
@@ -1455,7 +1543,6 @@ async function handleGoogleOAuthCallback() {
       if (typeof authManager !== 'undefined') {
         authManager.user = result.user;
         authManager.isLoggedIn = true;
-        authManager.saveToStorage();
         authManager.notifyListeners();
       }
 
@@ -1535,7 +1622,6 @@ async function showTermsModal(accountId, state, nonce){
         if(typeof authManager !== 'undefined'){
           authManager.user=result.user;
           authManager.isLoggedIn=true;
-          authManager.saveToStorage();
           authManager.notifyListeners();
         }
         
@@ -1592,19 +1678,39 @@ async function showTermsModal(accountId, state, nonce){
 }
 
 // ===== 設定頁面 =====
+function bindDangerZoneButtons(){
+  const clearLocalBtn=$('#settings-clear-local');
+  if(clearLocalBtn)clearLocalBtn.onclick=()=>showClearLocalDataModal();
+
+  const deleteDataBtn=$('#settings-delete-data');
+  if(deleteDataBtn)deleteDataBtn.onclick=()=>showDeleteDataModal();
+
+  const deleteAccountBtn=$('#settings-delete-account');
+  if(deleteAccountBtn)deleteAccountBtn.onclick=()=>showDeleteAccountModal();
+}
+
 async function initializeSettings(){
+  // 帳號資訊直接來自目前瀏覽器已驗證的 session，不等待設定 API。
+  updateAuthUI();
+  const currentUser=typeof authManager !== 'undefined' ? authManager.getCurrentUser?.() : null;
+  if(!currentUser||!authManager.isLoggedIn)return;
+
   try{
     // 獲取用戶設置
     const settingsData=await api.getUserSettings();
     if(!settingsData)return;
     
-    const user=settingsData.user;
-    const settings=settingsData.settings;
+    const user=settingsData.user||currentUser;
+    const settings={
+      ...DEFAULT_USER_SETTINGS,
+      ...(settingsData.settings||{})
+    };
+    applySettingsToControls(settings);
     
     // 顯示帳號信息
     const accountEl=$('#settings-account');
     if(accountEl){
-      accountEl.textContent=user.email||'未知';
+      accountEl.textContent=user.email||currentUser.email||'未知';
     }
     
     // 設置儲存設定複選框
@@ -1612,7 +1718,8 @@ async function initializeSettings(){
     if(saveNotesEl){
       saveNotesEl.checked=Boolean(settings.saveNotesToCloud);
       saveNotesEl.onchange=async e=>{
-        await updateSetting('saveNotesToCloud',e.target.checked);
+        const next=e.target.checked;
+        if(!(await updateSetting('saveNotesToCloud',next)))e.target.checked=!next;
       };
     }
     
@@ -1620,7 +1727,8 @@ async function initializeSettings(){
     if(saveDivinationsEl){
       saveDivinationsEl.checked=Boolean(settings.saveDivinationToCloud);
       saveDivinationsEl.onchange=async e=>{
-        await updateSetting('saveDivinationToCloud',e.target.checked);
+        const next=e.target.checked;
+        if(!(await updateSetting('saveDivinationToCloud',next)))e.target.checked=!next;
       };
     }
     
@@ -1628,7 +1736,8 @@ async function initializeSettings(){
     if(allowPublicNotesEl){
       allowPublicNotesEl.checked=Boolean(settings.allowPublicNotes);
       allowPublicNotesEl.onchange=async e=>{
-        await updateSetting('allowPublicNotes',e.target.checked);
+        const next=e.target.checked;
+        if(!(await updateSetting('allowPublicNotes',next)))e.target.checked=!next;
       };
     }
     
@@ -1637,13 +1746,20 @@ async function initializeSettings(){
     const thresholdValueEl=$('#settings-threshold-value');
     if(thresholdEl){
       thresholdEl.value=settings.noteVisibilityThresholdPercent ?? 50;
+      thresholdEl.dataset.savedValue=thresholdEl.value;
+      if(thresholdValueEl)thresholdValueEl.textContent=thresholdEl.value+'%';
       thresholdEl.oninput=e=>{
         thresholdValueEl.textContent=e.target.value+'%';
       };
       thresholdEl.onchange=async e=>{
-        await updateSetting('noteVisibilityThresholdPercent',parseInt(e.target.value));
-        // 立即重新加載當前頁面的註記
-        handleThresholdChange();
+        const previous=e.target.dataset.savedValue||'50';
+        const next=parseInt(e.target.value);
+        if(await updateSetting('noteVisibilityThresholdPercent',next)){
+          e.target.dataset.savedValue=String(next);
+        }else{
+          e.target.value=previous;
+          if(thresholdValueEl)thresholdValueEl.textContent=previous+'%';
+        }
       };
     }
     
@@ -1652,7 +1768,8 @@ async function initializeSettings(){
     if(notifyReplyEl){
       notifyReplyEl.checked=settings.notifyOnReply !== false;
       notifyReplyEl.onchange=async e=>{
-        await updateSetting('notifyOnReply',e.target.checked);
+        const next=e.target.checked;
+        if(!(await updateSetting('notifyOnReply',next)))e.target.checked=!next;
       };
     }
     
@@ -1693,15 +1810,13 @@ async function initializeSettings(){
 // 清除所有本機儲存的資料
 function clearLocalStorage(){
   const keysToRemove=[
-    'user',
-    'iching-highlights-v1',  // 本機註記
-    'iching-divinations-v1',  // 本機占卜紀錄
-    'userSettings',           // 本機設定
-    'thread-state',           // 討論串狀態快取
-    'scroll-position',        // 滾動位置快取
-    'article-cache',          // 文章快取
+    'iching-highlights-v1',
+    'iching-divinations-v1',
+    'userSettings',
+    'thread-state',
+    'scroll-position',
+    'article-cache'
   ];
-  
   keysToRemove.forEach(key=>{
     try{
       localStorage.removeItem(key);
@@ -1710,9 +1825,6 @@ function clearLocalStorage(){
       console.warn(`清除 ${key} 失敗:`,err);
     }
   });
-  
-  // 清除 sessionStorage
-  sessionStorage.clear();
   
   // 重置應用狀態
   state.notes=[];
@@ -1725,42 +1837,59 @@ function clearLocalStorage(){
 
 function showClearLocalDataModal(){
   const modal=document.createElement('div');
+  modal.id='clear-local-data-modal';
+  modal.className='modal danger-confirm-modal';
   modal.innerHTML=`
-    <div class="modal-overlay">
-      <div class="modal-content" style="max-width:400px">
-        <h3 style="margin-top:0">刪除瀏覽器資料</h3>
-        <p style="color:#666;font-size:0.9rem">請輸入目前 Google 登入帳號的 Gmail，以確認是您本人正在刪除本機註解、占卜紀錄與快取。</p>
-        <label style="display:flex;flex-direction:column;gap:4px;margin:16px 0;font-size:0.9rem">
-          <span style="color:#333">Google 帳號 Email</span>
-          <input type="email" class="confirm-email" autocomplete="email" placeholder="name@gmail.com" style="padding:8px;border:1px solid #ddd;border-radius:4px">
-        </label>
-        <p class="confirm-error" style="display:none;color:#c33;font-size:0.85rem;margin:8px 0"></p>
-        <div style="display:flex;gap:12px;margin-top:20px">
-          <button type="button" class="secondary-button cancel-action" style="flex:1">取消</button>
-          <button type="button" class="primary-button confirm-action" style="flex:1;background:#d9534f;border-color:#d9534f">確認刪除</button>
+    <section class="modal-card danger-confirm-card" role="dialog" aria-modal="true" aria-labelledby="clear-local-data-title">
+      <div class="modal-head danger-confirm-head">
+        <strong id="clear-local-data-title">刪除瀏覽器資料</strong>
+        <button type="button" class="close-button close-action" aria-label="關閉">×</button>
+      </div>
+      <div class="danger-confirm-body">
+        <p class="danger-confirm-copy">這會刪除目前瀏覽器內的註記、占卜紀錄與快取。Google 登入、條款同意與雲端資料不會被刪除。</p>
+        <p class="danger-confirm-warning"><strong>此操作無法復原。</strong></p>
+        <div class="modal-actions danger-confirm-actions">
+          <button type="button" class="secondary-button cancel-action">取消</button>
+          <button type="button" class="submit-button confirm-action">確認刪除</button>
         </div>
       </div>
-    </div>`;
-  document.body.appendChild(modal);
-  const emailInput=modal.querySelector('.confirm-email');
-  const error=modal.querySelector('.confirm-error');
-  const close=()=>modal.remove();
-  modal.querySelector('.cancel-action').onclick=close;
-  modal.querySelector('.modal-overlay').onclick=event=>{if(event.target===event.currentTarget)close();};
-  modal.querySelector('.confirm-action').onclick=async()=>{
-    const email=emailInput.value.trim();
-    if(!email){error.textContent='請輸入目前 Google 登入帳號的 Email。';error.style.display='block';return;}
-    try{
-      await api.clearLocalData(email);
-      clearLocalStorage();
-      close();
-      location.reload();
-    }catch(err){
-      error.textContent=err.message||'身分驗證失敗，無法刪除資料。';
-      error.style.display='block';
-    }
+    </section>`;
+  const close=mountDangerModal(modal);
+  modal.querySelector('.confirm-action').onclick=()=>{
+    clearLocalStorage();
+    close();
+    location.reload();
   };
-  emailInput.focus();
+  modal.querySelector('.cancel-action').focus();
+}
+
+function mountDangerModal(modal){
+  const close=()=>modal.remove();
+  modal.querySelectorAll('.cancel-action,.close-action').forEach(button=>{
+    button.onclick=close;
+  });
+  modal.onclick=event=>{
+    if(event.target===modal)close();
+  };
+  document.body.appendChild(modal);
+  return close;
+}
+
+function currentAuthenticatedEmail(){
+  return authManager?.getCurrentUser?.()?.email || null;
+}
+
+function requireCurrentAuthenticatedEmail(){
+  const email=currentAuthenticatedEmail();
+  if(!authManager?.isLoggedIn||!email){
+    toast('\u8eab\u5206\u9a57\u8b49\u5931\u6557\uff1a\u8acb\u5148\u767b\u5165\u76ee\u524d\u700f\u89bd\u5668\u7684\u5e33\u865f');
+    return null;
+  }
+  return email;
+}
+
+function emailMatchesCurrentUser(inputEmail,currentEmail){
+  return String(inputEmail||'').trim().toLowerCase()===String(currentEmail||'').trim().toLowerCase();
 }
 
 async function updateSetting(key,value){
@@ -1768,43 +1897,61 @@ async function updateSetting(key,value){
     const settings={};
     settings[key]=value;
     await api.updateUserSettings(settings);
+    if(key==='allowPublicNotes'||key==='noteVisibilityThresholdPercent'){
+      handleThresholdChange();
+    }
+    if(key==='saveNotesToCloud'&&value&&typeof syncCloudNotes==='function'){
+      syncCloudNotes().catch(error=>console.warn('Cloud note sync failed:',error));
+    }
+    if(key==='saveDivinationToCloud'&&value&&typeof syncCloudDivinations==='function'){
+      syncCloudDivinations().catch(error=>console.warn('Cloud divination sync failed:',error));
+    }
     console.log('設定已更新:',key,value);
+    return true;
   }catch(err){
     console.error('更新設定失敗:',err);
     alert('更新失敗：'+err.message);
+    return false;
   }
 }
 
 function showDeleteDataModal(){
+  const currentEmail=requireCurrentAuthenticatedEmail();
+  if(!currentEmail)return;
   const modal=document.createElement('div');
+  modal.id='delete-data-modal-overlay';
+  modal.className='modal danger-confirm-modal';
   modal.innerHTML=`
-    <div class="modal-overlay" id="delete-data-modal-overlay">
-      <div class="modal-content" style="max-width:400px">
-        <h3 style="margin-top:0">刪除雲端資料</h3>
-        <p style="color:#666;font-size:0.9rem">此操作將刪除以下內容：</p>
-        <ul style="color:#666;font-size:0.9rem;margin:12px 0">
+    <section class="modal-card danger-confirm-card" role="dialog" aria-modal="true" aria-labelledby="delete-data-title">
+      <div class="modal-head danger-confirm-head">
+        <strong id="delete-data-title">刪除雲端資料</strong>
+        <button type="button" class="close-button close-action" aria-label="關閉">×</button>
+      </div>
+      <div class="danger-confirm-body">
+        <p class="danger-confirm-account">目前登入帳號：<strong>${esc(currentEmail)}</strong></p>
+        <p class="danger-confirm-copy">此操作將刪除以下內容：</p>
+        <ul class="danger-confirm-list">
           <li>✓ 雲端占卜紀錄</li>
           <li>✓ 公開註記與討論</li>
           <li>✓ 收藏列表</li>
           <li>✗ 本機資料不會被刪除</li>
         </ul>
-        <p style="color:#f00;font-size:0.85rem;margin:12px 0"><strong>此操作不可逆。</strong></p>
-        <label style="display:flex;flex-direction:column;gap:4px;margin:16px 0;font-size:0.9rem">
-          <span style="color:#333">請輸入您的 Email 地址以確認：</span>
-          <input type="email" id="delete-data-email" placeholder="your@email.com" style="padding:8px;border:1px solid #ddd;border-radius:4px">
+        <p class="danger-confirm-warning"><strong>此操作不可逆。</strong></p>
+        <label class="danger-confirm-field">
+          <span>請輸入您的 Email 地址以確認：</span>
+          <input type="email" id="delete-data-email" placeholder="your@email.com" autocomplete="email">
         </label>
-        <div style="display:flex;gap:12px;margin-top:20px">
-          <button class="secondary-button" style="flex:1" onclick="document.getElementById('delete-data-modal-overlay').remove()">取消</button>
-          <button id="confirm-delete-data-btn" class="primary-button" style="flex:1;background:#d9534f;border-color:#d9534f">確認刪除</button>
+        <div class="modal-actions danger-confirm-actions">
+          <button type="button" class="secondary-button cancel-action">取消</button>
+          <button type="button" id="confirm-delete-data-btn" class="submit-button">確認刪除</button>
         </div>
       </div>
-    </div>
+    </section>
   `;
-  document.body.appendChild(modal);
+  const close=mountDangerModal(modal);
   
   const confirmBtn=modal.querySelector('#confirm-delete-data-btn');
   const emailInput=modal.querySelector('#delete-data-email');
-  const overlay=modal.querySelector('.modal-overlay');
   
   confirmBtn.onclick=async()=>{
     const email=emailInput.value.trim();
@@ -1813,18 +1960,21 @@ function showDeleteDataModal(){
       return;
     }
     
+    if(!emailMatchesCurrentUser(email,currentEmail)){
+      alert('\u8eab\u5206\u9a57\u8b49\u5931\u6557\uff1a\u8acb\u8f38\u5165\u76ee\u524d\u767b\u5165\u5e33\u865f\u7684 Gmail');
+      return;
+    }
+
     try{
       await api.deleteCloudData(email);
       alert('雲端資料已開始刪除。');
-      overlay.remove();
+      close();
     }catch(err){
       alert('刪除失敗：'+err.message);
     }
   };
   
-  overlay.onclick=e=>{
-    if(e.target===overlay)overlay.remove();
-  };
+  emailInput.focus();
 }
 
 // ===== 收藏列表 =====
@@ -1834,7 +1984,7 @@ async function loadFavoritesList(){
     const favoritesList=$('#favorites-list');
     
     if(!response||!response.notes||response.notes.length===0){
-      favoritesList.innerHTML='<div style="padding:12px;text-align:center;color:#888">暫無收藏</div>';
+      favoritesList.innerHTML='<div style="padding:12px;text-align:center;color:#888">&#23578;&#28961;&#25910;&#34255;</div>';
       return;
     }
     
@@ -1861,9 +2011,7 @@ async function loadFavoritesList(){
   }catch(err){
     console.error('加載收藏列表失敗:',err);
     const favoritesList=$('#favorites-list');
-    favoritesList.innerHTML=err.status===404
-      ? '<div style="padding:12px;text-align:center;color:#888">暫無收藏</div>'
-      : `<div style="padding:12px;text-align:center;color:#888">${esc(err.message||'暫時無法取得收藏')}</div>`;
+    favoritesList.innerHTML='<div style="padding:12px;text-align:center;color:#888">尚無收藏</div>';
   }
 }
 
@@ -1874,7 +2022,7 @@ function navigateToFavorite(noteId,articleId){
   
   // 等待頁面加載後打開討論串
   setTimeout(()=>{
-    const notes=window.publicNotesByArticle?.[guaId];
+    const notes=window.publicNotesByArticle?.[articleId];
     if(notes){
       const note=notes.find(n=>n.id===noteId);
       if(note){
@@ -1892,12 +2040,12 @@ async function loadNotificationsList(){
     const notificationsList=$('#notifications-list');
     
     if(!response||!response.notifications||response.notifications.length===0){
-      notificationsList.innerHTML='<div style="padding:12px;text-align:center;color:#888">暫無通知</div>';
+      notificationsList.innerHTML='<div style="padding:12px;text-align:center;color:#888">&#23578;&#28961;&#36890;&#30693;</div>';
       return;
     }
     
     const html=response.notifications.map((notif,i)=>`
-      <div class="notification-item" style="padding:12px;border-bottom:1px solid #eee;cursor:pointer;transition:all 0.2s;background:${notif.read_at?'#fff':'#f9f9f9'}" onmouseover="this.style.backgroundColor='#f5f5f5'" onmouseout="this.style.backgroundColor='${notif.read_at?'#fff':'#f9f9f9'}'" onclick="navigateToNotification('${notif.id}','${notif.reference_id}')">
+      <div class="notification-item" style="padding:12px;border-bottom:1px solid #eee;cursor:pointer;transition:all 0.2s;background:${notif.read_at?'#fff':'#f9f9f9'}" onmouseover="this.style.backgroundColor='#f5f5f5'" onmouseout="this.style.backgroundColor='${notif.read_at?'#fff':'#f9f9f9'}'" onclick="navigateToNotification('${notif.id}','${notif.note_id||notif.target_id||''}')">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:4px">
           <div>
             <strong style="color:#333">${
@@ -1917,9 +2065,7 @@ async function loadNotificationsList(){
   }catch(err){
     console.error('加載通知列表失敗:',err);
     const notificationsList=$('#notifications-list');
-    notificationsList.innerHTML=err.status===404
-      ? '<div style="padding:12px;text-align:center;color:#888">暫無通知</div>'
-      : `<div style="padding:12px;text-align:center;color:#888">${esc(err.message||'暫時無法取得通知')}</div>`;
+    notificationsList.innerHTML='<div style="padding:12px;text-align:center;color:#888">尚無通知</div>';
   }
 }
 
@@ -1928,7 +2074,8 @@ function navigateToNotification(notificationId,referenceId){
   api.markNotificationAsRead(notificationId).catch(()=>{});
   
   // 導航到相關注記（需要先查詢該注記的信息）
-  api.getNote(referenceId).then(note=>{
+  api.getNote(referenceId).then(response=>{
+    const note=response?.note||response;
     // 檢查內容是否已被刪除
     if(!note||note.deleted_at){
       alert('抱歉，該內容已被刪除。');
@@ -1939,7 +2086,7 @@ function navigateToNotification(notificationId,referenceId){
     window.location.hash=`gua/${guaId}`;
     
     setTimeout(()=>{
-      const notes=window.publicNotesByArticle?.[guaId];
+      const notes=window.publicNotesByArticle?.[note.article_id];
       if(notes){
         const targetNote=notes.find(n=>n.id===referenceId);
         if(targetNote){
@@ -1959,35 +2106,42 @@ function navigateToNotification(notificationId,referenceId){
 }
 
 function showDeleteAccountModal(){
+  const currentEmail=requireCurrentAuthenticatedEmail();
+  if(!currentEmail)return;
   const modal=document.createElement('div');
+  modal.id='delete-account-modal-overlay';
+  modal.className='modal danger-confirm-modal';
   modal.innerHTML=`
-    <div class="modal-overlay" id="delete-account-modal-overlay">
-      <div class="modal-content" style="max-width:400px">
-        <h3 style="margin-top:0;color:#d9534f">⚠️ 刪除帳號</h3>
-        <p style="color:#f00;font-size:0.9rem"><strong>此操作無法撤銷</strong></p>
-        <p style="color:#666;font-size:0.9rem;margin:12px 0">您確定要永久刪除帳號嗎？刪除後：</p>
-        <ul style="color:#666;font-size:0.9rem;margin:12px 0">
+    <section class="modal-card danger-confirm-card" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
+      <div class="modal-head danger-confirm-head">
+        <strong id="delete-account-title">刪除帳號</strong>
+        <button type="button" class="close-button close-action" aria-label="關閉">×</button>
+      </div>
+      <div class="danger-confirm-body">
+        <p class="danger-confirm-account">目前登入帳號：<strong>${esc(currentEmail)}</strong></p>
+        <p class="danger-confirm-copy">您確定要永久刪除帳號嗎？刪除後：</p>
+        <ul class="danger-confirm-list">
           <li>✓ 帳號將被停用</li>
           <li>✓ 所有雲端資料將被刪除</li>
           <li>✓ 您將被登出</li>
           <li>✓ 無法恢復</li>
         </ul>
-        <label style="display:flex;flex-direction:column;gap:4px;margin:16px 0;font-size:0.9rem">
-          <span style="color:#333">請輸入您的 Email 地址以確認刪除：</span>
-          <input type="email" id="delete-account-email" placeholder="your@email.com" style="padding:8px;border:1px solid #ddd;border-radius:4px">
+        <p class="danger-confirm-warning"><strong>此操作無法撤銷。</strong></p>
+        <label class="danger-confirm-field">
+          <span>請輸入您的 Email 地址以確認刪除：</span>
+          <input type="email" id="delete-account-email" placeholder="your@email.com" autocomplete="email">
         </label>
-        <div style="display:flex;gap:12px;margin-top:20px">
-          <button class="secondary-button" style="flex:1" onclick="document.getElementById('delete-account-modal-overlay').remove()">取消</button>
-          <button id="confirm-delete-account-btn" class="primary-button" style="flex:1;background:#d9534f;border-color:#d9534f">確認刪除帳號</button>
+        <div class="modal-actions danger-confirm-actions">
+          <button type="button" class="secondary-button cancel-action">取消</button>
+          <button type="button" id="confirm-delete-account-btn" class="submit-button">確認刪除帳號</button>
         </div>
       </div>
-    </div>
+    </section>
   `;
-  document.body.appendChild(modal);
+  const close=mountDangerModal(modal);
   
   const confirmBtn=modal.querySelector('#confirm-delete-account-btn');
   const emailInput=modal.querySelector('#delete-account-email');
-  const overlay=modal.querySelector('.modal-overlay');
   
   confirmBtn.onclick=async()=>{
     const email=emailInput.value.trim();
@@ -1996,10 +2150,15 @@ function showDeleteAccountModal(){
       return;
     }
     
+    if(!emailMatchesCurrentUser(email,currentEmail)){
+      alert('\u8eab\u5206\u9a57\u8b49\u5931\u6557\uff1a\u8acb\u8f38\u5165\u76ee\u524d\u767b\u5165\u5e33\u865f\u7684 Gmail');
+      return;
+    }
+
     try{
       const result=await api.deleteAccount(email);
       alert('帳號已刪除，即將返回首頁...');
-      overlay.remove();
+      close();
       // 清除登入信息
       api.clearSessionToken();
       localStorage.removeItem('user');
@@ -2010,7 +2169,5 @@ function showDeleteAccountModal(){
     }
   };
   
-  overlay.onclick=e=>{
-    if(e.target===overlay)overlay.remove();
-  };
+  emailInput.focus();
 }

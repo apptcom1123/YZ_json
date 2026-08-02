@@ -6,6 +6,26 @@ export class NoteRepository extends BaseRepository {
     super(db, 'notes');
   }
 
+  applyVisibilityThreshold(notes, thresholdPercent = 50) {
+    const percent = Math.min(100, Math.max(0, Number(thresholdPercent) || 0));
+    const clusters = new Map();
+    for (const note of notes || []) {
+      const key = `${note.paragraph_anchor}:${note.cluster_key}`;
+      if (!clusters.has(key)) clusters.set(key, []);
+      clusters.get(key).push(note);
+    }
+
+    const visible = [];
+    for (const cluster of clusters.values()) {
+      cluster.sort((a, b) =>
+        (b.score || 0) - (a.score || 0)
+        || (b.upvote_count || 0) - (a.upvote_count || 0)
+        || new Date(b.created_at) - new Date(a.created_at));
+      visible.push(...cluster.slice(0, Math.ceil(cluster.length * percent / 100)));
+    }
+    return visible;
+  }
+
   /**
    * 為文章與段落創建註記
    */
@@ -78,7 +98,7 @@ export class NoteRepository extends BaseRepository {
     if (this.isSupabase) {
       const { data, error } = await this.db
         .from('notes')
-        .select('*, users(public_display_name)')
+        .select('*, users!notes_author_id_fkey(public_display_name)')
         .eq('article_id', articleId)
         .eq('paragraph_anchor', paragraphAnchor)
         .eq('visibility', 'public')
@@ -88,10 +108,10 @@ export class NoteRepository extends BaseRepository {
         .order('score', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(note => ({
+      return this.applyVisibilityThreshold((data || []).map(note => ({
         ...note,
         public_display_name: note.users?.public_display_name
-      }));
+      })), thresholdPercent);
     }
 
     const query = `
@@ -105,7 +125,7 @@ export class NoteRepository extends BaseRepository {
       ORDER BY n.cluster_key ASC, n.score DESC, n.created_at DESC
     `;
 
-    return this.db.all(query, [articleId, paragraphAnchor]);
+    return this.applyVisibilityThreshold(await this.db.all(query, [articleId, paragraphAnchor]), thresholdPercent);
   }
 
   /**
@@ -117,7 +137,6 @@ export class NoteRepository extends BaseRepository {
         .from('notes')
         .select('*')
         .eq('author_id', userId)
-        .eq('visibility', 'private')
         .eq('status', 'active')
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
@@ -133,7 +152,6 @@ export class NoteRepository extends BaseRepository {
       SELECT n.*
       FROM notes n
       WHERE n.author_id = ?
-        AND n.visibility = 'private'
         AND n.status = 'active'
     `;
     const params = [userId];
@@ -148,11 +166,11 @@ export class NoteRepository extends BaseRepository {
     return this.db.all(query, params);
   }
 
-  async getPublicNotesForArticle(articleId) {
+  async getPublicNotesForArticle(articleId, thresholdPercent = 50) {
     if (this.isSupabase) {
       const { data, error } = await this.db
         .from('notes')
-        .select('*, users(public_display_name)')
+        .select('*, users!notes_author_id_fkey(public_display_name)')
         .eq('article_id', articleId)
         .eq('visibility', 'public')
         .eq('status', 'active')
@@ -161,13 +179,13 @@ export class NoteRepository extends BaseRepository {
         .order('score', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(note => ({
+      return this.applyVisibilityThreshold((data || []).map(note => ({
         ...note,
         public_display_name: note.users?.public_display_name
-      }));
+      })), thresholdPercent);
     }
 
-    return this.db.all(`
+    return this.applyVisibilityThreshold(await this.db.all(`
       SELECT n.*, u.public_display_name
       FROM notes n
       LEFT JOIN users u ON n.author_id = u.id
@@ -175,7 +193,7 @@ export class NoteRepository extends BaseRepository {
         AND n.visibility = 'public'
         AND n.status = 'active'
       ORDER BY n.cluster_key ASC, n.score DESC, n.created_at DESC
-    `, [articleId]);
+    `, [articleId]), thresholdPercent);
   }
 
   /**

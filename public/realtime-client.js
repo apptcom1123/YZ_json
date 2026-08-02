@@ -3,6 +3,7 @@ class RealtimeClient {
     this.client = null;
     this.isEnabled = false;
     this.subscriptions = new Map();
+    this.statuses = new Map();
   }
 
   initialize() {
@@ -24,7 +25,7 @@ class RealtimeClient {
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'notes', filter: `article_id=eq.${articleId}`
       }, payload => onUpdate({ event: payload.eventType, data: payload.new || payload.old }))
-      .subscribe();
+      .subscribe(status => this.setStatus(id, status));
     this.subscriptions.set(id, channel);
     return id;
   }
@@ -37,7 +38,7 @@ class RealtimeClient {
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'note_replies', filter: `note_id=eq.${noteId}`
       }, onUpdate)
-      .subscribe();
+      .subscribe(status => this.setStatus(id, status));
     this.subscriptions.set(id, channel);
     return id;
   }
@@ -58,7 +59,7 @@ class RealtimeClient {
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'notes', filter: `id=eq.${noteId}`
       }, payload => onUpdate({ event: payload.eventType, data: payload.new }))
-      .subscribe();
+      .subscribe(status => this.setStatus(id, status));
     this.subscriptions.set(id, channel);
     return id;
   }
@@ -79,7 +80,7 @@ class RealtimeClient {
       .on('postgres_changes', {
         event: '*', schema: 'public', table, filter: `user_id=eq.${userId}`
       }, payload => onUpdate({ event: payload.eventType, data: payload.new || payload.old }))
-      .subscribe();
+      .subscribe(status => this.setStatus(id, status));
     this.subscriptions.set(id, channel);
     return id;
   }
@@ -89,6 +90,16 @@ class RealtimeClient {
     if (!channel) return;
     await this.client.removeChannel(channel);
     this.subscriptions.delete(id);
+    this.statuses.delete(id);
+  }
+
+  setStatus(id, status) {
+    this.statuses.set(id, status);
+    window.dispatchEvent(new CustomEvent('supabase-realtime-status', { detail: { id, status } }));
+  }
+
+  getStatus(id) {
+    return this.statuses.get(id) || 'NOT_SUBSCRIBED';
   }
 
   async unsubscribeAll() {

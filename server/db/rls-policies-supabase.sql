@@ -37,9 +37,11 @@ grant select, update on table public.user_settings to authenticated;
 grant select on table public.user_stats to authenticated;
 grant select, insert, update, delete on table public.divination_records to authenticated;
 grant select, insert, update, delete on table public.notes to authenticated;
+grant select on table public.notes to anon;
 grant select, insert, update, delete on table public.note_votes to authenticated;
 grant select, insert, update, delete on table public.note_favorites to authenticated;
 grant select, insert, update, delete on table public.note_replies to authenticated;
+grant select on table public.note_replies to anon;
 grant select on table public.legal_consents to authenticated;
 grant select on table public.notifications to authenticated;
 grant update (is_read, read_at) on table public.notifications to authenticated;
@@ -139,11 +141,11 @@ using (user_id = auth.uid()::text);
 create policy "Users can read visible notes"
 on public.notes
 for select
-to authenticated
+to anon, authenticated
 using (
   deleted_at is null
   and status = 'active'
-  and (author_id = auth.uid()::text or visibility = 'public')
+  and (visibility = 'public' or author_id = auth.uid()::text)
 );
 
 create policy "Users can insert own notes"
@@ -212,15 +214,18 @@ with check (user_id = auth.uid()::text);
 create policy "Users can read replies on visible notes"
 on public.note_replies
 for select
-to authenticated
+to anon, authenticated
 using (
-  author_id = auth.uid()::text
-  or exists (
+  status = 'active'
+  and (
+    author_id = auth.uid()::text
+    or exists (
     select 1 from public.notes n
     where n.id = note_replies.note_id
       and n.visibility = 'public'
       and n.status = 'active'
       and n.deleted_at is null
+    )
   )
 );
 

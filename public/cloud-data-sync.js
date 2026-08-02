@@ -50,7 +50,8 @@ function toLocalCloudDivination(record) {
     serverId: record.id,
     question: record.question_text || '',
     result: record.result_payload,
-    timestamp: new Date(record.created_at).getTime()
+    timestamp: new Date(record.created_at).getTime(),
+    ownerId: record.user_id || authManager.getCurrentUser()?.id || null
   };
 }
 

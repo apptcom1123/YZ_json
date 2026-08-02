@@ -13,7 +13,17 @@ const router = express.Router();
  */
 router.get('/:noteId/replies', optionalAuth, async (req, res) => {
   try {
-    const { reply: replyRepo } = req.app.locals.repositories;
+    const { reply: replyRepo, note: noteRepo } = req.app.locals.repositories;
+    const note = await noteRepo.findById(req.params.noteId);
+    if (!note || note.status !== 'active' || note.deleted_at) {
+      return res.status(404).json({ error: 'NOTE_NOT_FOUND', message: '註記不存在' });
+    }
+    if (note.visibility !== 'public' && note.author_id !== req.user?.userId) {
+      return res.status(403).json({
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：非註記持有者本人'
+      });
+    }
     const replies = await replyRepo.getNoteReplies(req.params.noteId);
 
     res.json({
@@ -53,6 +63,13 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
       return res.status(404).json({
         error: 'NOTE_NOT_FOUND',
         message: '註記不存在'
+      });
+    }
+
+    if (note.status !== 'active' || note.deleted_at || (note.visibility !== 'public' && note.author_id !== req.user.userId)) {
+      return res.status(403).json({
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：無權回覆此註記'
       });
     }
 
@@ -108,7 +125,14 @@ router.post('/:noteId/replies/:replyId/vote', requireAuth, async (req, res) => {
       });
     }
 
-    const { reply: replyRepo } = req.app.locals.repositories;
+    const { reply: replyRepo, note: noteRepo } = req.app.locals.repositories;
+    const note = await noteRepo.findById(req.params.noteId);
+    if (!note || note.status !== 'active' || note.deleted_at || (note.visibility !== 'public' && note.author_id !== req.user.userId)) {
+      return res.status(403).json({
+        error: 'IDENTITY_VERIFICATION_FAILED',
+        message: '身分驗證失敗：無權對此留言投票'
+      });
+    }
     const reply = await replyRepo.findById(req.params.replyId);
     if (!reply || reply.note_id !== req.params.noteId || reply.status !== 'active') {
       return res.status(404).json({

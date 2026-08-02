@@ -20,9 +20,8 @@ data/
 .vscode/
 .idea/
 .DS_Store
+.playwright-mcp
 
 # Development
 TODO.txt
-BACKEND_SETUP.md
-DEVELOPMENT.md
-SUPABASE_READY_REPORT.md
+*.png

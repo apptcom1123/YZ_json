@@ -6,6 +6,10 @@ alter table public.user_settings
   alter column note_visibility_threshold_percent set default 50,
   alter column notify_on_reply set default true;
 
+-- DELETE events need the old row values so article/note filters keep working.
+alter table public.notes replica identity full;
+alter table public.note_replies replica identity full;
+
 do $$
 begin
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notes') then
