@@ -9,6 +9,15 @@ const state={hexagrams:[],selectedId:1,query:'',page:'hexagrams',pending:null,ed
 const $=(selector)=>document.querySelector(selector);
 const reader=$('#reader'),list=$('#hexagram-list'),search=$('#search'),count=$('#result-count');
 
+function currentUserId(){ return authManager?.getCurrentUser?.()?.id || null; }
+function canAccessLocalNote(note){
+  const userId=currentUserId();
+  return note.ownerId ? note.ownerId===userId : !userId;
+}
+function localNotesForDocument(doc){
+  return state.notes.filter(note=>note.doc===doc&&canAccessLocalNote(note));
+}
+
 // 初始化認證系統（在其他 UI 初始化前進行）
 if(typeof authManager !== 'undefined'){
   authManager.onAuthChange(()=>updateAuthUI?.());
@@ -85,6 +94,10 @@ function bindUI(){
     $('#login-button').onclick=async ()=>{
       if(typeof authManager !== 'undefined'){
         try{
+          if(authManager.isLoggedIn&&authManager.getCurrentUser?.()){
+            updateAuthUI();
+            return;
+          }
           await beginTermsGate();
         }catch(err){
           console.error('登入啟動失敗:', err);
@@ -258,6 +271,10 @@ function cancelPendingSelection(){
 }
 
 function openAnnotationModal(note){
+  if(note&&!canAccessLocalNote(note)){
+    toast('身分驗證失敗：非使用者本人');
+    return;
+  }
   const target=note||state.notes.find(n=>n.id===state.editingId);if(!target&&!state.pending)return;
   state.editingId=note?.id||null;const source=note||state.pending;
   $('#annotation-title').textContent=note?'編輯註解':'新增註解';$('#selected-quote').textContent=source.text;
@@ -275,6 +292,10 @@ function closeAnnotationModal(){
 async function submitAnnotation(event){
   event.preventDefault();const comment=$('#annotation-text').value.trim();if(!comment)return;
   const visibility=document.querySelector('input[name="visibility"]:checked')?.value||'private';
+  if(visibility==='public'&&!authManager.isLoggedIn){
+    toast('公開註解需要先完成 Google 登入');
+    return;
+  }
   
   if(state.editingId){
     const note=state.notes.find(n=>n.id===state.editingId);
@@ -292,7 +313,7 @@ async function submitAnnotation(event){
     }
   }
   else if(state.pending){
-    const newNote={...state.pending,comment,visibility,id:crypto.randomUUID?.()||String(Date.now())};
+    const newNote={...state.pending,comment,visibility,id:crypto.randomUUID?.()||String(Date.now()),ownerId:currentUserId()||null};
     state.notes.push(newNote);
     // 如果是 public 註記且已登入，發送到 API
     if(visibility==='public'&&typeof api!=='undefined'&&authManager.isLoggedIn){
@@ -321,15 +342,14 @@ function applyHighlights(){
   const root=$('.annotatable');if(!root)return;
   
   // 加載私人註記
-  const privateEntries=state.notes.filter(n=>n.doc===root.dataset.doc&&n.visibility!=='public').map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:Math.floor(n.start/5)})).filter(x=>x.range);
+  const privateEntries=localNotesForDocument(root.dataset.doc).filter(n=>n.visibility!=='public'||!n.serverId).map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:Math.floor(n.start/5)})).filter(x=>x.range);
   
   // 先渲染私人氣泡
   requestAnimationFrame(()=>renderBubbles(privateEntries));
   
   // 加載公開註記（異步）
-  if(typeof api!=='undefined'&&root.dataset.doc.startsWith('gua-')){
-    const articleId=root.dataset.doc.replace('gua-','');
-    loadPublicNotesForPage(articleId);
+  if(typeof api!=='undefined'){
+    loadPublicNotesForPage(root.dataset.doc);
   }
   
   // 設置私人註記高亮
@@ -354,13 +374,13 @@ async function loadPublicNotesForPage(articleId){
     }
     
     // 從伺服器加載公開註記，應用用戶設置的閾值
-    const response=await fetch(`/api/notes?articleId=gua-${articleId}&paragraphAnchor=0&thresholdPercent=${thresholdPercent}`);
+    const response=await fetch(`/api/notes?articleId=${encodeURIComponent(articleId)}&thresholdPercent=${thresholdPercent}`);
     if(!response.ok)return;
     
     const data=await response.json();
     if(!data.notes||!data.notes.length)return;
     
-    const root=$('.annotatable');if(!root||root.dataset.doc!==`gua-${articleId}`)return;
+    const root=$('.annotatable');if(!root||root.dataset.doc!==articleId)return;
     
     // 儲存公開註記到全局狀態供討論串使用
     if(!window.publicNotesByArticle)window.publicNotesByArticle={};
@@ -368,7 +388,7 @@ async function loadPublicNotesForPage(articleId){
     
     // 將公開註記轉換為 entries 格式並計算 cluster
     const publicEntries=data.notes.map(note=>({
-      note:{...note,visibility:'public',id:note.id,doc:`gua-${articleId}`,start:note.anchor_offset_start,end:note.anchor_offset_end,comment:note.content},
+      note:{...note,visibility:'public',id:note.id,doc:articleId,start:note.anchor_offset_start,end:note.anchor_offset_end,comment:note.content},
       range:rangeFromOffsets(root,note.anchor_offset_start,note.anchor_offset_end),
       type:'public',
       clusterId:Math.floor(note.anchor_offset_start/5)
@@ -382,12 +402,12 @@ async function loadPublicNotesForPage(articleId){
     }
     
     // 與私人註記一起渲染所有氣泡
-    const privateEntries=state.notes.filter(n=>n.doc===root.dataset.doc&&n.visibility!=='public').map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:Math.floor(n.start/5)})).filter(x=>x.range);
+    const privateEntries=localNotesForDocument(root.dataset.doc).filter(n=>n.visibility!=='public'||!n.serverId).map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:Math.floor(n.start/5)})).filter(x=>x.range);
     renderBubbles([...privateEntries,...publicEntries]);
     
     // 訂閱 Realtime 更新
     if(typeof realtimeClient !== 'undefined' && realtimeClient.isEnabled){
-      const subscriptionId=realtimeClient.subscribeToNotes(articleId,0,(update)=>{
+      const subscriptionId=realtimeClient.subscribeToNotes(articleId,(update)=>{
         if(update.event==='INSERT'||update.event==='UPDATE'||update.event==='DELETE'){
           console.log('✓ Realtime 更新:',update.event);
           // 重新加載註記
@@ -408,7 +428,7 @@ async function loadPublicNotesForPage(articleId){
 function handleThresholdChange(){
   const root=$('.annotatable');
   if(root){
-    const articleId=root.dataset.doc?.split('-')[1];
+    const articleId=root.dataset.doc;
     if(articleId){
       loadPublicNotesForPage(articleId);
     }
@@ -646,6 +666,7 @@ function renderThreadContent(note){
   
   if(!cluster)return;
   counter.textContent=`${currentIndex+1}/${cluster.length}`;
+  const canEditNote=authManager.isLoggedIn&&note.author_id===currentUserId();
   
   // 主註記
   const mainHTML=`
@@ -659,6 +680,7 @@ function renderThreadContent(note){
           <button class="thread-vote" data-note-id="${note.id}" data-vote="up" style="background:none;border:none;cursor:pointer">👍 ${note.upvote_count||0}</button>
           <button class="thread-vote" data-note-id="${note.id}" data-vote="down" style="background:none;border:none;cursor:pointer">👎 ${note.downvote_count||0}</button>
           <button class="thread-favorite" data-note-id="${note.id}" style="background:none;border:none;cursor:pointer">⭐ ${note.favorite_count||0}</button>
+          ${canEditNote?`<button class="thread-edit-note" type="button" style="background:none;border:none;cursor:pointer">編輯</button>`:''}
         </div>
       </div>
       <p style="color:#333;line-height:1.5;margin:8px 0">${esc(note.content)}</p>
@@ -683,6 +705,29 @@ function renderThreadContent(note){
   `).join('');
   
   container.innerHTML=mainHTML+repliesHTML;
+  const editButton=container.querySelector('.thread-edit-note');
+  if(editButton){
+    editButton.onclick=()=>{
+      let localNote=state.notes.find(item=>item.serverId===note.id&&canAccessLocalNote(item));
+      if(!localNote){
+        localNote={
+          id:note.local_uuid||note.id,
+          serverId:note.id,
+          ownerId:note.author_id,
+          doc:note.article_id,
+          start:note.anchor_offset_start,
+          end:note.anchor_offset_end,
+          text:'',
+          comment:note.content,
+          visibility:note.visibility
+        };
+        state.notes.push(localNote);
+        saveNotes();
+      }
+      closeThreadModal();
+      openAnnotationModal(localNote);
+    };
+  }
   if(typeof realtimeClient !== 'undefined'){
     realtimeClient.subscribeToReplies(note.id,async()=>{
       try{
@@ -829,12 +874,13 @@ function openNotes(){
 }
 function renderNotes(){
   const box=$('#notes-list');
-  if(!state.notes.length){
+  const notes=state.notes.filter(canAccessLocalNote);
+  if(!notes.length){
     box.innerHTML='<p class="empty">尚未加入螢光筆標記。</p>';
     return;
   }
   
-  box.innerHTML=state.notes.slice().reverse().map(n=>`
+  box.innerHTML=notes.slice().reverse().map(n=>`
     <article class="note-item" data-note-id="${n.id}">
       <div class="note-meta">
         <span>${notePageName(n.doc)}${n.visibility==='public'?' · 公開':'·私人'}</span>
@@ -851,8 +897,12 @@ function renderNotes(){
   box.onclick=e=>{
     const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');
     
-    if(edit){const note=state.notes.find(n=>n.id===edit.dataset.edit);if(note)openAnnotationModal(note);}
-    if(del){state.notes=state.notes.filter(n=>n.id!==del.dataset.delete);saveNotes();renderNotes();applyHighlights();}
+    if(edit){const note=state.notes.find(n=>n.id===edit.dataset.edit&&canAccessLocalNote(n));if(note)openAnnotationModal(note);}
+    if(del){
+      const note=state.notes.find(n=>n.id===del.dataset.delete&&canAccessLocalNote(n));
+      if(!note){toast('身分驗證失敗：非使用者本人');return;}
+      state.notes=state.notes.filter(n=>n.id!==note.id);saveNotes();renderNotes();applyHighlights();
+    }
   };
 }
 
@@ -1227,7 +1277,8 @@ function updateAuthUI(){
   const authContainer=$('#auth-container');
   if(!authContainer)return;
   
-  if(typeof authManager !== 'undefined' && authManager.isLoggedIn){
+  const signedIn=typeof authManager !== 'undefined'&&authManager.isLoggedIn&&authManager.getCurrentUser?.();
+  if(signedIn){
     // 已登入 - 顯示用戶菜單
     $('#login-button').style.display='none';
     $('#user-menu').style.display='flex';
@@ -1236,6 +1287,8 @@ function updateAuthUI(){
     if(user){
       const nickname=user.displayName||user.email||'使用者';
       $('#user-nickname').textContent=nickname;
+      $('#user-menu-toggle').textContent=nickname.trim().slice(0,1).toUpperCase()||'●';
+      $('#user-menu-toggle').setAttribute('aria-label',`${nickname} 的用戶選單`);
       
       // 加載統計數據
       loadUserStats();
@@ -1244,6 +1297,7 @@ function updateAuthUI(){
     // 未登入 - 顯示登入按鈕
     $('#login-button').style.display='block';
     $('#user-menu').style.display='none';
+    $('#user-menu-toggle').textContent='●';
     closeUserMenu();
   }
 }
@@ -1619,6 +1673,8 @@ async function initializeSettings(){
     }
     
     // 刪除雲端資料按鈕
+    if(clearLocalBtn)clearLocalBtn.onclick=()=>showClearLocalDataModal();
+
     const deleteDataBtn=$('#settings-delete-data');
     if(deleteDataBtn){
       deleteDataBtn.onclick=()=>showDeleteDataModal();
@@ -1665,6 +1721,46 @@ function clearLocalStorage(){
   window.threadData={};
   
   console.log('✓ 所有本機資料已清除');
+}
+
+function showClearLocalDataModal(){
+  const modal=document.createElement('div');
+  modal.innerHTML=`
+    <div class="modal-overlay">
+      <div class="modal-content" style="max-width:400px">
+        <h3 style="margin-top:0">刪除瀏覽器資料</h3>
+        <p style="color:#666;font-size:0.9rem">請輸入目前 Google 登入帳號的 Gmail，以確認是您本人正在刪除本機註解、占卜紀錄與快取。</p>
+        <label style="display:flex;flex-direction:column;gap:4px;margin:16px 0;font-size:0.9rem">
+          <span style="color:#333">Google 帳號 Email</span>
+          <input type="email" class="confirm-email" autocomplete="email" placeholder="name@gmail.com" style="padding:8px;border:1px solid #ddd;border-radius:4px">
+        </label>
+        <p class="confirm-error" style="display:none;color:#c33;font-size:0.85rem;margin:8px 0"></p>
+        <div style="display:flex;gap:12px;margin-top:20px">
+          <button type="button" class="secondary-button cancel-action" style="flex:1">取消</button>
+          <button type="button" class="primary-button confirm-action" style="flex:1;background:#d9534f;border-color:#d9534f">確認刪除</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const emailInput=modal.querySelector('.confirm-email');
+  const error=modal.querySelector('.confirm-error');
+  const close=()=>modal.remove();
+  modal.querySelector('.cancel-action').onclick=close;
+  modal.querySelector('.modal-overlay').onclick=event=>{if(event.target===event.currentTarget)close();};
+  modal.querySelector('.confirm-action').onclick=async()=>{
+    const email=emailInput.value.trim();
+    if(!email){error.textContent='請輸入目前 Google 登入帳號的 Email。';error.style.display='block';return;}
+    try{
+      await api.clearLocalData(email);
+      clearLocalStorage();
+      close();
+      location.reload();
+    }catch(err){
+      error.textContent=err.message||'身分驗證失敗，無法刪除資料。';
+      error.style.display='block';
+    }
+  };
+  emailInput.focus();
 }
 
 async function updateSetting(key,value){
@@ -1765,7 +1861,9 @@ async function loadFavoritesList(){
   }catch(err){
     console.error('加載收藏列表失敗:',err);
     const favoritesList=$('#favorites-list');
-    favoritesList.innerHTML='<div style="padding:12px;text-align:center;color:#f00">加載失敗，請重試</div>';
+    favoritesList.innerHTML=err.status===404
+      ? '<div style="padding:12px;text-align:center;color:#888">暫無收藏</div>'
+      : `<div style="padding:12px;text-align:center;color:#888">${esc(err.message||'暫時無法取得收藏')}</div>`;
   }
 }
 
@@ -1819,7 +1917,9 @@ async function loadNotificationsList(){
   }catch(err){
     console.error('加載通知列表失敗:',err);
     const notificationsList=$('#notifications-list');
-    notificationsList.innerHTML='<div style="padding:12px;text-align:center;color:#f00">加載失敗，請重試</div>';
+    notificationsList.innerHTML=err.status===404
+      ? '<div style="padding:12px;text-align:center;color:#888">暫無通知</div>'
+      : `<div style="padding:12px;text-align:center;color:#888">${esc(err.message||'暫時無法取得通知')}</div>`;
   }
 }
 

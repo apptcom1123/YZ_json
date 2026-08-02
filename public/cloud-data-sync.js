@@ -8,6 +8,7 @@ function toLocalCloudNote(note) {
     text: '',
     comment: note.content,
     visibility: note.visibility,
+    ownerId: note.author_id,
     updatedAt: note.updated_at
   };
 }
@@ -18,6 +19,7 @@ async function syncCloudNotes() {
   const savePrivateNotes = Boolean(settingsResponse.settings?.saveNotesToCloud);
 
   for (const note of state.notes) {
+    if (!canAccessLocalNote(note)) continue;
     if (note.serverId || (!savePrivateNotes && note.visibility !== 'public')) continue;
     const response = await api.createNote({
       articleType: note.doc?.startsWith('gua-') ? 'iching' : 'md',

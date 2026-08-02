@@ -148,6 +148,36 @@ export class NoteRepository extends BaseRepository {
     return this.db.all(query, params);
   }
 
+  async getPublicNotesForArticle(articleId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('notes')
+        .select('*, users(public_display_name)')
+        .eq('article_id', articleId)
+        .eq('visibility', 'public')
+        .eq('status', 'active')
+        .is('deleted_at', null)
+        .order('cluster_key', { ascending: true })
+        .order('score', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(note => ({
+        ...note,
+        public_display_name: note.users?.public_display_name
+      }));
+    }
+
+    return this.db.all(`
+      SELECT n.*, u.public_display_name
+      FROM notes n
+      LEFT JOIN users u ON n.author_id = u.id
+      WHERE n.article_id = ?
+        AND n.visibility = 'public'
+        AND n.status = 'active'
+      ORDER BY n.cluster_key ASC, n.score DESC, n.created_at DESC
+    `, [articleId]);
+  }
+
   /**
    * 計算聚合泡泡（每 5 字視窗）
    */

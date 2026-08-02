@@ -197,8 +197,8 @@ class APIClient {
   /**
    * 清除本機數據
    */
-  clearLocalData() {
-    return this.post('/me/local-data/clear', {});
+  clearLocalData(confirmEmail) {
+    return this.post('/me/local-data/clear', { confirmEmail });
   }
 
   // ========== 註記 API ==========

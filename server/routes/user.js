@@ -8,6 +8,12 @@ import { requireAuth, requireSession } from '../middleware/auth.js';
 const router = express.Router();
 const toBoolean = (value) => value === true || value === 1;
 
+function hasConfirmedCurrentEmail(req, confirmEmail) {
+  const entered = String(confirmEmail || '').trim().toLowerCase();
+  const authenticatedEmail = String(req.authUser?.email || req.user?.email || '').trim().toLowerCase();
+  return Boolean(entered && authenticatedEmail && entered === authenticatedEmail);
+}
+
 /**
  * GET /api/me/settings
  * 獲取當前用戶的設置
@@ -234,6 +240,24 @@ router.patch('/settings/notifications', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/me/favorites
+ * Return the authenticated user's saved public notes. An empty list is valid.
+ */
+router.get('/favorites', requireAuth, async (req, res) => {
+  try {
+    const { note: noteRepo } = req.app.locals.repositories;
+    const notes = await noteRepo.getUserFavorites(req.user.userId);
+    res.json({ notes, count: notes.length });
+  } catch (error) {
+    console.error('Get user favorites error:', error);
+    res.status(500).json({
+      error: 'FETCH_FAVORITES_FAILED',
+      message: '無法取得收藏列表'
+    });
+  }
+});
+
+/**
  * POST /api/me/data/delete
  * 刪除雲端數據
  */
@@ -245,7 +269,7 @@ router.post('/data/delete', requireAuth, async (req, res) => {
     const user = await userRepo.findById(req.user.userId);
 
     // 驗證郵件地址
-    if (confirmEmail !== user.email) {
+    if (!hasConfirmedCurrentEmail(req, confirmEmail)) {
       return res.status(400).json({
         error: 'EMAIL_CONFIRM_MISMATCH',
         message: '郵件地址不符'
@@ -355,7 +379,7 @@ router.post('/account/delete', requireAuth, async (req, res) => {
     const user = await userRepo.findById(req.user.userId);
 
     // 驗證郵件地址
-    if (confirmEmail !== user.email) {
+    if (!hasConfirmedCurrentEmail(req, confirmEmail)) {
       return res.status(400).json({
         error: 'EMAIL_CONFIRM_MISMATCH',
         message: '郵件地址不符'
@@ -400,6 +424,12 @@ router.post('/account/delete', requireAuth, async (req, res) => {
  * 通知前端清除本機數據
  */
 router.post('/local-data/clear', requireAuth, (req, res) => {
+  if (!hasConfirmedCurrentEmail(req, req.body.confirmEmail)) {
+    return res.status(400).json({
+      error: 'EMAIL_CONFIRM_MISMATCH',
+      message: 'Identity verification failed: enter the current Google account email.'
+    });
+  }
   res.json({
     success: true,
     message: '應清除本機 localStorage 和 IndexedDB'

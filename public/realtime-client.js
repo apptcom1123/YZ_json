@@ -16,19 +16,14 @@ class RealtimeClient {
     if (typeof authManager !== 'undefined') authManager.onAuthChange(connect);
   }
 
-  subscribeToNotes(articleId, paragraphAnchor, onUpdate) {
-    const id = `notes:${articleId}:${paragraphAnchor}`;
+  subscribeToNotes(articleId, onUpdate) {
+    const id = `notes:${articleId}`;
     if (!this.isEnabled || this.subscriptions.has(id)) return id;
     const channel = this.client
       .channel(id)
       .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'notes', filter: `article_id=eq.gua-${articleId}`
-      }, payload => {
-        const row = payload.new || payload.old;
-        if (String(row?.paragraph_anchor) === String(paragraphAnchor)) {
-          onUpdate({ event: payload.eventType, data: payload.new || payload.old });
-        }
-      })
+        event: '*', schema: 'public', table: 'notes', filter: `article_id=eq.${articleId}`
+      }, payload => onUpdate({ event: payload.eventType, data: payload.new || payload.old }))
       .subscribe();
     this.subscriptions.set(id, channel);
     return id;

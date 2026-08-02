@@ -83,6 +83,7 @@ export class UserRepository extends BaseRepository {
       this.db.from('notes').update({ status: 'deleted', deleted_at: deletedAt, updated_at: deletedAt }).eq('author_id', userId),
       this.db.from('note_replies').update({ status: 'deleted', updated_at: deletedAt }).eq('author_id', userId),
       this.db.from('note_votes').delete().eq('user_id', userId), this.db.from('note_favorites').delete().eq('user_id', userId),
+      this.db.from('reply_votes').delete().eq('user_id', userId),
       this.db.from('divination_records').delete().eq('user_id', userId)
     ];
     for (const operation of operations) { const { error } = await operation; if (error) throw error; }

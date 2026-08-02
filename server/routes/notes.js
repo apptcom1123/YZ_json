@@ -15,7 +15,7 @@ router.get('/', optionalAuth, async (req, res) => {
   try {
     const { articleId, paragraphAnchor, clusterKey, thresholdPercent = 60 } = req.query;
 
-    if (!articleId || !paragraphAnchor) {
+    if (!articleId) {
       return res.status(400).json({
         error: 'MISSING_PARAMS',
         message: '必須提供 articleId 和 paragraphAnchor'
@@ -25,11 +25,9 @@ router.get('/', optionalAuth, async (req, res) => {
     const { note: noteRepo } = req.app.locals.repositories;
 
     // 獲取公開註記
-    let notes = await noteRepo.getPublicNotesForParagraph(
-      articleId,
-      paragraphAnchor,
-      thresholdPercent
-    );
+    let notes = paragraphAnchor === undefined
+      ? await noteRepo.getPublicNotesForArticle(articleId)
+      : await noteRepo.getPublicNotesForParagraph(articleId, paragraphAnchor, thresholdPercent);
 
     // 為每條註記添加當前用戶的投票和收藏狀態
     if (req.user) {
@@ -214,6 +212,21 @@ router.patch('/:id', requireAuth, async (req, res) => {
         error: 'FORBIDDEN',
         message: '無法編輯他人的註記'
       });
+    }
+
+    if (visibility === 'public') {
+      const { data: settings, error: settingsError } = await req.app.locals.supabaseClient
+        .from('user_settings')
+        .select('allow_public_notes')
+        .eq('user_id', req.user.userId)
+        .maybeSingle();
+      if (settingsError) throw settingsError;
+      if (!settings?.allow_public_notes) {
+        return res.status(403).json({
+          error: 'PUBLIC_NOTES_DISABLED',
+          message: '請先在設定中啟用公開註記。'
+        });
+      }
     }
 
     if (content) {
