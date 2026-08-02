@@ -42,7 +42,12 @@ class AuthManager {
   async logout() {
     try { await api.logout(); } catch (_) { /* Continue local sign-out. */ }
     if (this.client) await this.client.auth.signOut();
-    this.user = null; this.isLoggedIn = false; api.clearSessionToken(); this.notifyListeners();
+    this.user = null;
+    this.isLoggedIn = false;
+    localStorage.removeItem('iching_authenticated_user_id');
+    sessionStorage.removeItem(window.ICHING_TERMS_LOGIN_INTENT_KEY || 'iching_terms_login_intent');
+    api.clearSessionToken();
+    this.notifyListeners();
   }
 
   async checkAuthStatus() {
@@ -69,12 +74,17 @@ class AuthManager {
     let response = null;
     try {
       const termsVersion = window.ICHING_TERMS_VERSION || '2026-07-26';
-      const browserAccepted = localStorage.getItem('iching_terms_version') === termsVersion;
+      const intentKey = window.ICHING_TERMS_LOGIN_INTENT_KEY || 'iching_terms_login_intent';
+      const hasLoginIntent = sessionStorage.getItem(intentKey) === termsVersion;
       response = await api.getAuthStatus();
+      const trustedUserId = localStorage.getItem('iching_authenticated_user_id');
+      const isExistingBrowserSession = Boolean(response.user?.id && response.user.id === trustedUserId);
 
-      // The pre-login checkbox is recorded locally before OAuth. Once Google has
-      // verified the user, use that authenticated session to persist the consent.
-      if (response.requiresTerms && browserAccepted) {
+      if (response.requiresTerms && response.user) {
+        if (!hasLoginIntent) {
+          await this.rejectUnconfirmedSession();
+          return { loggedIn: false, requiresTerms: false, user: null };
+        }
         const accepted = await api.acceptTerms(termsVersion);
         if (!accepted?.termsAccepted || accepted.acceptedVersion !== termsVersion) {
           throw new Error('TERMS_STATUS_NOT_UPDATED');
@@ -82,9 +92,19 @@ class AuthManager {
         response = await api.getAuthStatus();
       }
 
+      if (response.loggedIn && response.user && !hasLoginIntent && !isExistingBrowserSession) {
+        await this.rejectUnconfirmedSession();
+        return { loggedIn: false, requiresTerms: false, user: null };
+      }
+
       this.user = response.user || null;
-      this.requiresTerms = Boolean(response.requiresTerms) || (Boolean(response.loggedIn) && !browserAccepted);
-      this.isLoggedIn = Boolean(response.loggedIn) && browserAccepted && !this.requiresTerms;
+      this.requiresTerms = Boolean(response.requiresTerms);
+      this.isLoggedIn = Boolean(response.loggedIn) && !this.requiresTerms;
+      if (this.isLoggedIn) {
+        localStorage.setItem('iching_terms_version', termsVersion);
+        localStorage.setItem('iching_authenticated_user_id', this.user.id);
+        sessionStorage.removeItem(intentKey);
+      }
       this.notifyListeners(); return response;
     } catch (error) {
       console.error('Authentication status refresh failed:', error);
@@ -94,6 +114,15 @@ class AuthManager {
       this.notifyListeners();
       return { loggedIn: false, requiresTerms: this.requiresTerms, user: this.user };
     }
+  }
+
+  async rejectUnconfirmedSession() {
+    if (this.client) await this.client.auth.signOut();
+    api.clearSessionToken();
+    this.user = null;
+    this.isLoggedIn = false;
+    this.requiresTerms = false;
+    this.notifyListeners();
   }
 
   onAuthChange(callback) { this.listeners.push(callback); }

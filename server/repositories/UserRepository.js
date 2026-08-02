@@ -1,6 +1,6 @@
 import { BaseRepository } from './BaseRepository.js';
 
-const CURRENT_TERMS_VERSION = '2026-07-26';
+export const CURRENT_TERMS_VERSION = '2026-07-26';
 
 export class UserRepository extends BaseRepository {
   constructor(db) { super(db, 'users'); }

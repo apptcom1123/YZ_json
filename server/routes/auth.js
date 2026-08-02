@@ -11,34 +11,38 @@ router.get('/config', (req, res) => {
   });
 });
 
-router.get('/status', async (req, res) => {
-  if (!req.user) {
-    return res.json({
-      loggedIn: false,
-      loginBlocked: false,
-      requiresTerms: false,
-      blockReason: null,
-      user: null
-    });
-  }
-
-  const user = req.userInfo || await req.app.locals.repositories.user.findById(req.user.userId);
-  if (!user) return res.status(404).json({ error: 'USER_NOT_FOUND', message: '找不到使用者資料' });
-
-  const login = await req.app.locals.repositories.user.canLogin(user.id);
-  res.json({
-    loggedIn: login.allowed,
-    loginBlocked: !login.allowed,
-    requiresTerms: !login.allowed && login.reason === 'TERMS_NOT_ACCEPTED',
-    blockReason: login.reason || null,
-    user: {
-      id: user.id,
-      email: user.email,
-      displayName: user.display_name,
-      avatarUrl: user.avatar_url,
-      role: user.role
+router.get('/status', async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.json({
+        loggedIn: false,
+        loginBlocked: false,
+        requiresTerms: false,
+        blockReason: null,
+        user: null
+      });
     }
-  });
+
+    const user = req.userInfo || await req.app.locals.repositories.user.findById(req.user.userId);
+    if (!user) return res.status(404).json({ error: 'USER_NOT_FOUND', message: '找不到使用者資料' });
+
+    const login = await req.app.locals.repositories.user.canLogin(user.id);
+    res.json({
+      loggedIn: login.allowed,
+      loginBlocked: !login.allowed,
+      requiresTerms: !login.allowed && login.reason === 'TERMS_NOT_ACCEPTED',
+      blockReason: login.reason || null,
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.display_name,
+        avatarUrl: user.avatar_url,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.post('/logout', requireSession, (req, res) => res.json({ success: true }));
