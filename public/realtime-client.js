@@ -129,6 +129,16 @@ class RealtimeClient {
     return this.subscribeToUserTable('notifications', 'notifications', userId, onUpdate);
   }
 
+  subscribeToPrivateNotes(userId, onUpdate) {
+    const id = `private-notes:${userId}`;
+    this.updateHandlers.set(id, onUpdate);
+    return this.register(id, client => client
+      .channel(`user:${userId}:notes-sync`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'notes', filter: `author_id=eq.${userId}`
+      }, payload => this.dispatchUpdate(id, payload)));
+  }
+
   subscribeToDivinations(userId, onUpdate) {
     return this.subscribeToUserTable('divinations', 'divination_records', userId, onUpdate);
   }

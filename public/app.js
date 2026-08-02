@@ -18,7 +18,7 @@ const DEFAULT_USER_SETTINGS={
   notifyOnReply:true
 };
 const PUBLIC_NOTE_RANK_WINDOW=20;
-const BUBBLE_LONG_PRESS_MS=350;
+const BUBBLE_LONG_PRESS_MS=220;
 const THRESHOLD_SAVE_DELAY_MS=220;
 let currentNoteThresholdPercent=50;
 const thresholdSaveState={timer:null,saving:false,desired:50,persisted:50};
@@ -445,6 +445,7 @@ function closeAnnotationModal(){
 async function submitAnnotation(event){
   event.preventDefault();const comment=$('#annotation-text').value.trim();if(!comment)return;
   const visibility=document.querySelector('input[name="visibility"]:checked')?.value||'private';
+  let noteToSync=null;
   if(visibility==='public'&&!authManager.isLoggedIn){
     toast('公開註解需要先完成 Google 登入');
     return;
@@ -486,7 +487,7 @@ async function submitAnnotation(event){
     }
   }
   else if(state.pending){
-    const newNote={...state.pending,comment,visibility,id:crypto.randomUUID?.()||String(Date.now()),ownerId:currentUserId()||null};
+    const newNote={...state.pending,comment,visibility,id:crypto.randomUUID?.()||String(Date.now()),ownerId:currentUserId()||null,syncStatus:'local'};
     // 公開註記先完成雲端建立，避免失敗後留下「假公開」本地資料。
     if(visibility==='public'&&typeof api!=='undefined'&&authManager.isLoggedIn){
       try{
@@ -508,23 +509,37 @@ async function submitAnnotation(event){
       }
     }
     state.notes.push(newNote);
+    if(visibility==='private'&&authManager.isLoggedIn&&$('#settings-save-notes')?.checked){
+      noteToSync=newNote;
+    }
   }
   saveNotes();getSelection()?.removeAllRanges();state.pending=null;state.editingId=null;$('#annotation-modal').hidden=true;$('#highlight-action').hidden=true;
-  applyHighlights();if(!$('#notes-panel').hidden)renderNotes();toast(visibility==='public'?'公開註解已儲存':'註解已保存在此裝置');navigator.vibrate?.(35);
+  applyHighlights({refreshPublic:visibility==='public'});if(!$('#notes-panel').hidden)renderNotes();toast(visibility==='public'?'公開註解已儲存':'註解已保存在此裝置');navigator.vibrate?.(35);
+  if(noteToSync&&typeof syncCloudNote==='function'){
+    syncCloudNote(noteToSync).then(()=>{
+      if(!$('#notes-panel').hidden)renderNotes();
+    }).catch(error=>{
+      console.warn('Private note cloud sync failed:',error);
+      toast(error.message||'私人註解同步失敗，內容仍保存在此瀏覽器');
+      if(!$('#notes-panel').hidden)renderNotes();
+    });
+  }
 }
 
-function applyHighlights(){
-  document.querySelectorAll('.annotation-bubble').forEach(x=>x.remove());
+function applyHighlights({refreshPublic=true}={}){
   const root=$('.annotatable');if(!root)return;
   
   // 加載私人註記
   const privateEntries=localNotesForDocument(root.dataset.doc).filter(n=>n.visibility!=='public'||!n.serverId).map(n=>({note:n,range:rangeFromOffsets(root,n.start,n.end),type:'private',clusterId:Math.floor(n.start/5)})).filter(x=>x.range);
   
-  // 先渲染私人氣泡
-  requestAnimationFrame(()=>renderBubbles(privateEntries));
+  const hasPublicCache=Array.isArray(window.publicNotesByArticle?.[root.dataset.doc]);
+  requestAnimationFrame(()=>{
+    if(hasPublicCache)renderCachedPublicNotes(root.dataset.doc);
+    else renderBubbles(privateEntries);
+  });
   
   // 加載公開註記（異步）
-  if(typeof api!=='undefined'){
+  if(refreshPublic&&typeof api!=='undefined'){
     loadPublicNotesForPage(root.dataset.doc);
   }
   
@@ -852,8 +867,10 @@ async function flushThresholdSetting(control,valueEl){
 }
 
 function renderBubbles(entries,{animatePublic=false}={}){
-  // 清除現有的所有氣泡
-  document.querySelectorAll('.annotation-bubble').forEach(b => b.remove());
+  document.querySelectorAll('.annotation-bubble:not([data-bubble-key])').forEach(bubble=>bubble.remove());
+  const existingBubbles=new Map([...document.querySelectorAll('.annotation-bubble[data-bubble-key]')]
+    .map(bubble=>[bubble.dataset.bubbleKey,bubble]));
+  const retainedKeys=new Set();
   
   // 分離私人和公開註記
   let privateEntries=entries.filter(e=>e.type==='private');
@@ -883,18 +900,25 @@ function renderBubbles(entries,{animatePublic=false}={}){
   privateEntries.forEach(({note,range},idx)=>{
     const rect=[...range.getClientRects()].at(-1)||range.getBoundingClientRect();
     if(!rect.width&&!rect.height)return;
-    
-    const bubble=document.createElement('button');
-    bubble.className='annotation-bubble annotation-bubble-private';
-    bubble.type='button';
+    const clusterId=Math.floor(Number(note.start||0)/5);
+    const bubbleKey=`private:${clusterId}`;
+    let bubble=existingBubbles.get(bubbleKey);
+    if(!bubble){
+      bubble=document.createElement('button');
+      bubble.className='annotation-bubble annotation-bubble-private';
+      bubble.type='button';
+      bubble.dataset.bubbleKey=bubbleKey;
+      document.body.appendChild(bubble);
+      bindBubble(bubble);
+    }
+    retainedKeys.add(bubbleKey);
+    bubble._note=note;
     bubble.textContent=bubbleOrder.get(`private:${Math.floor(Number(note.start||0)/5)}`)||idx+1;
     bubble.dataset.note=note.id;
     bubble.dataset.type='private';
     bubble.style.left=`${Math.min(innerWidth-32,rect.right+scrollX)}px`;
     bubble.style.top=`${rect.bottom+scrollY}px`;
     bubble.setAttribute('aria-label',`註解：${note.comment||note.text}`);
-    document.body.appendChild(bubble);
-    bindBubble(bubble,note);
   });
   
   // 聚合公開註記 - 按 cluster 分組
@@ -915,11 +939,19 @@ function renderBubbles(entries,{animatePublic=false}={}){
       const rect=[...firstEntry.range.getClientRects()].at(-1)||firstEntry.range.getBoundingClientRect();
       if(!rect.width&&!rect.height)return;
       
-      // 創建聚合氣泡
-      const bubble=document.createElement('button');
-      bubble.className='annotation-bubble annotation-bubble-public';
-      if(animatePublic)bubble.classList.add('annotation-bubble-threshold-enter');
-      bubble.type='button';
+      const bubbleKey=`public:${clusterId}`;
+      let bubble=existingBubbles.get(bubbleKey);
+      if(!bubble){
+        bubble=document.createElement('button');
+        bubble.className='annotation-bubble annotation-bubble-public';
+        bubble.type='button';
+        bubble.dataset.bubbleKey=bubbleKey;
+        document.body.appendChild(bubble);
+        bindClusterBubble(bubble);
+        if(animatePublic)bubble.classList.add('annotation-bubble-threshold-enter');
+      }
+      retainedKeys.add(bubbleKey);
+      bubble._cluster=cluster;
       
       // 氣泡顯示註記數量或"聚合"標誌
       bubble.textContent=bubbleOrder.get(`public:${clusterId}`)||1;
@@ -932,23 +964,23 @@ function renderBubbles(entries,{animatePublic=false}={}){
       bubble.style.top=`${rect.bottom+scrollY}px`;
       bubble.setAttribute('aria-label',`${cluster.length}條討論 - 最高分：${Math.max(...cluster.map(e=>e.note.score||0))}`);
       
-      document.body.appendChild(bubble);
-      
-      // 綁定聚合氣泡事件
-      bindClusterBubble(bubble,cluster);
       queueThreadPrefetch([cluster[0]?.note]);
     });
   }
+  existingBubbles.forEach((bubble,key)=>{
+    if(!retainedKeys.has(key))bubble.remove();
+  });
 }
 
-function bindClusterBubble(bubble,cluster){
-  const prefetch=()=>queueThreadPrefetch(orderedThreadCluster(cluster).slice(0,2).map(entry=>entry.note));
+function bindClusterBubble(bubble){
+  const getCluster=()=>bubble._cluster||[];
+  const prefetch=()=>queueThreadPrefetch(orderedThreadCluster(getCluster()).slice(0,2).map(entry=>entry.note));
   bubble.addEventListener('pointerenter',prefetch,{once:true,passive:true});
   bubble.addEventListener('focus',prefetch,{once:true});
-  bindBubbleLongPress(bubble,()=>orderedThreadCluster(cluster)[0]?.note,prefetch);
+  bindBubbleLongPress(bubble,()=>orderedThreadCluster(getCluster())[0]?.note,prefetch);
   bubble.addEventListener('dblclick',e=>{
     e.preventDefault();
-    openThreadModal(cluster);
+    openThreadModal(getCluster());
   });
 }
 
@@ -968,9 +1000,9 @@ function bindBubbleLongPress(bubble,getNote,onStart=null){
   ['pointerup','pointercancel','pointerleave'].forEach(type=>bubble.addEventListener(type,cancel));
 }
 
-function bindBubble(bubble,note){
-  bindBubbleLongPress(bubble,()=>note);
-  bubble.addEventListener('dblclick',e=>{e.preventDefault();hideBubble();openAnnotationModal(note);});
+function bindBubble(bubble){
+  bindBubbleLongPress(bubble,()=>bubble._note);
+  bubble.addEventListener('dblclick',e=>{e.preventDefault();hideBubble();if(bubble._note)openAnnotationModal(bubble._note);});
 }
 
 function pruneThreadRepliesCache(){
@@ -1094,7 +1126,9 @@ function orderedThreadCluster(cluster){
 function orderedReplies(replies, sortBy='best'){
   return [...replies].sort((a,b)=>sortBy==='latest'
     ? new Date(b.created_at)-new Date(a.created_at)
-    : (b.upvote_count||0)-(a.upvote_count||0)||new Date(b.created_at)-new Date(a.created_at));
+    : ((b.upvote_count||0)-(b.downvote_count||0))-((a.upvote_count||0)-(a.downvote_count||0))
+      ||(b.upvote_count||0)-(a.upvote_count||0)
+      ||new Date(b.created_at)-new Date(a.created_at));
 }
 
 function flattenReplies(replies,depth=0){
@@ -1173,6 +1207,27 @@ async function sendThreadReply(note,reply,submitButton=null){
   }
 }
 
+function captureReplyPositions(){
+  return new Map([...document.querySelectorAll('#thread-content .thread-reply[data-reply-id]')]
+    .map(element=>[element.dataset.replyId,element.getBoundingClientRect().top]));
+}
+
+function renderThreadContentWithReplyReorder(note){
+  const previousPositions=captureReplyPositions();
+  renderThreadContent(note);
+  if(!previousPositions.size||window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
+  document.querySelectorAll('#thread-content .thread-reply[data-reply-id]').forEach(element=>{
+    const previousTop=previousPositions.get(element.dataset.replyId);
+    if(previousTop==null)return;
+    const delta=previousTop-element.getBoundingClientRect().top;
+    if(Math.abs(delta)<1)return;
+    element.animate(
+      [{transform:`translateY(${delta}px)`},{transform:'translateY(0)'}],
+      {duration:180,easing:'ease-out'}
+    );
+  });
+}
+
 function queueThreadActivityUpdate(note,update){
   const row=update?.data;
   const version=Number(row?.version)||0;
@@ -1195,7 +1250,10 @@ function queueThreadActivityUpdate(note,update){
   }else if(row.event_type==='reply.created'){
     note.reply_count=payload.reply_count;
   }
-  if(window.threadData)requestAnimationFrame(()=>renderThreadContent(note));
+  if(window.threadData)requestAnimationFrame(()=>{
+    if(row.event_type==='reply.vote.updated')renderThreadContentWithReplyReorder(note);
+    else renderThreadContent(note);
+  });
 }
 
 function queueThreadReplyRealtimeUpdate(note,update){
@@ -1229,7 +1287,7 @@ function queueThreadReplyRealtimeUpdate(note,update){
     threadReplyRealtimeQueue.clear();
     touchedNotes.forEach(targetNote=>{
       cacheThreadReplies(targetNote);
-      if(window.threadData)renderThreadContent(targetNote);
+      if(window.threadData)renderThreadContentWithReplyReorder(targetNote);
     });
   });
 }
@@ -1302,12 +1360,21 @@ async function openThreadModal(cluster){
           cluster.sort((a,b)=>new Date(b.note.created_at)-new Date(a.note.created_at));
         }
         
-        renderThreadContent(cluster[window.threadData.currentIndex].note);
+        const threadData=window.threadData;
+        if(threadData?.cluster?.length){
+          renderThreadContentWithReplyReorder(threadData.cluster[threadData.currentIndex].note);
+        }
       };
     });
   }
   
   // 綁定事件
+  modal.querySelectorAll('.thread-sort-btn').forEach(btn=>{
+    const selected=btn.dataset.sort==='hot';
+    btn.style.borderColor=btn.style.color=selected?'#963b2e':'#ddd';
+    btn.setAttribute('aria-pressed',String(selected));
+  });
+
   $('#thread-prev').onclick=async()=>{
     if(window.threadData.currentIndex>0){
       window.threadData.currentIndex--;
@@ -1504,18 +1571,19 @@ function renderThreadContent(note){
       if(pendingEngagementActions.has(actionKey))return;
       const snapshot=applyOptimisticVote(reply,btn.dataset.vote);
       pendingEngagementActions.add(actionKey);
-      renderThreadContent(note);
+      renderThreadContentWithReplyReorder(note);
       animateThreadControl(`.thread-reply-vote[data-reply-id="${reply.id}"][data-vote="${btn.dataset.vote}"]`,'interaction-pop');
       try{
         const result=await api.voteReply(note.id,btn.dataset.replyId,btn.dataset.vote);
-        if(result.reply)Object.assign(reply,result.reply);
-        reply.userVote=result.userVote??result.reply?.userVote??reply.userVote;
+        const currentReply=findReplyById(note.replies,reply.id)||reply;
+        if(result.reply)Object.assign(currentReply,result.reply);
+        currentReply.userVote=result.userVote??result.reply?.userVote??currentReply.userVote;
         if(result.version)note._activityVersion=Math.max(Number(note._activityVersion)||0,Number(result.version)||0);
-        renderThreadContent(note);
+        renderThreadContentWithReplyReorder(note);
       }catch(err){
         console.error('留言投票失敗:',err);
-        Object.assign(reply,snapshot);
-        renderThreadContent(note);
+        Object.assign(findReplyById(note.replies,reply.id)||reply,snapshot);
+        renderThreadContentWithReplyReorder(note);
         toast(err.message||'留言投票失敗');
       }finally{
         pendingEngagementActions.delete(actionKey);
@@ -1699,8 +1767,86 @@ async function handleFavorite(noteId){
   }
 }
 function notePageName(doc){if(doc.startsWith('gua-')){const x=state.hexagrams.find(g=>g.id===Number(doc.slice(4)));return x?`${x.name}卦`:'六十四卦';}return TEXTS.find(x=>`text-${x.id}`===doc)?.label||'原文';}
+const NOTES_DB_NAME='iching-reader-local';
+const NOTES_DB_STORE='annotations';
+let indexedNotesWritePromise=Promise.resolve();
+
 function loadNotes(){try{return (JSON.parse(localStorage.getItem('iching-highlights-v1'))||[]).map((n,i)=>({...n,id:n.id||`legacy-${i}-${n.createdAt||0}`,comment:n.comment||''}));}catch{return [];}}
-function saveNotes(){localStorage.setItem('iching-highlights-v1',JSON.stringify(state.notes));}
+
+function openNotesDatabase(){
+  return new Promise((resolve,reject)=>{
+    if(!window.indexedDB){resolve(null);return;}
+    const request=indexedDB.open(NOTES_DB_NAME,1);
+    request.onupgradeneeded=()=>{
+      if(!request.result.objectStoreNames.contains(NOTES_DB_STORE))request.result.createObjectStore(NOTES_DB_STORE);
+    };
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error);
+  });
+}
+
+async function writeNotesToIndexedDB(notes){
+  const db=await openNotesDatabase();
+  if(!db)return;
+  await new Promise((resolve,reject)=>{
+    const transaction=db.transaction(NOTES_DB_STORE,'readwrite');
+    transaction.objectStore(NOTES_DB_STORE).put(notes,'all');
+    transaction.oncomplete=resolve;
+    transaction.onerror=()=>reject(transaction.error);
+  });
+  db.close();
+}
+
+async function readNotesFromIndexedDB(){
+  const db=await openNotesDatabase();
+  if(!db)return [];
+  const notes=await new Promise((resolve,reject)=>{
+    const request=db.transaction(NOTES_DB_STORE,'readonly').objectStore(NOTES_DB_STORE).get('all');
+    request.onsuccess=()=>resolve(Array.isArray(request.result)?request.result:[]);
+    request.onerror=()=>reject(request.error);
+  });
+  db.close();
+  return notes;
+}
+
+async function hydrateNotesFromIndexedDB(){
+  const stored=await readNotesFromIndexedDB();
+  if(!stored.length){
+    if(state.notes.length)await writeNotesToIndexedDB(state.notes);
+    return;
+  }
+  const known=new Set(state.notes.flatMap(note=>[note.id,note.serverId].filter(Boolean).map(String)));
+  const missing=stored.filter(note=>![note.id,note.serverId].filter(Boolean).some(id=>known.has(String(id))));
+  if(!missing.length)return;
+  state.notes.push(...missing);
+  localStorage.setItem('iching-highlights-v1',JSON.stringify(state.notes));
+  applyHighlights({refreshPublic:false});
+  if(!$('#notes-panel').hidden)renderNotes();
+}
+
+function saveNotes(){
+  localStorage.setItem('iching-highlights-v1',JSON.stringify(state.notes));
+  const snapshot=JSON.parse(JSON.stringify(state.notes));
+  indexedNotesWritePromise=indexedNotesWritePromise
+    .catch(()=>{})
+    .then(()=>writeNotesToIndexedDB(snapshot))
+    .catch(error=>console.warn('IndexedDB note save failed:',error));
+}
+
+async function clearIndexedNotes(){
+  await indexedNotesWritePromise.catch(()=>{});
+  const db=await openNotesDatabase();
+  if(!db)return;
+  await new Promise((resolve,reject)=>{
+    const transaction=db.transaction(NOTES_DB_STORE,'readwrite');
+    transaction.objectStore(NOTES_DB_STORE).clear();
+    transaction.oncomplete=resolve;
+    transaction.onerror=()=>reject(transaction.error);
+  });
+  db.close();
+}
+
+queueMicrotask(()=>hydrateNotesFromIndexedDB().catch(error=>console.warn('IndexedDB note load failed:',error)));
 
 function openDrawer(){$('#drawer').classList.add('open');$('#drawer').setAttribute('aria-hidden','false');$('#menu-button').setAttribute('aria-expanded','true');$('#backdrop').hidden=false;}
 function closeDrawer(){$('#drawer').classList.remove('open');$('#drawer').setAttribute('aria-hidden','true');$('#menu-button').setAttribute('aria-expanded','false');if($('#notes-panel').hidden)$('#backdrop').hidden=true;}
@@ -2261,7 +2407,7 @@ async function initializeSettings(){
       clearLocalBtn.onclick=async()=>{
         if(confirm('確定要清除本機資料？此操作不可逆。\n\n將清除：\n- 本機註記\n- 本機占卜紀錄\n- 本機偏好設定\n- 本機快取')){
           try{
-            clearLocalStorage();
+            await clearLocalStorage();
             alert('本機資料已清除，頁面將重新整理。');
             setTimeout(()=>location.reload(),500);
           }catch(err){
@@ -2290,7 +2436,7 @@ async function initializeSettings(){
 }
 
 // 清除所有本機儲存的資料
-function clearLocalStorage(){
+async function clearLocalStorage(){
   const keysToRemove=[
     'iching-highlights-v1',
     'iching-divinations-v1',
@@ -2313,6 +2459,7 @@ function clearLocalStorage(){
   state.divinations=[];
   window.publicNotesByArticle={};
   window.threadData={};
+  await clearIndexedNotes();
   
   console.log('✓ 所有本機資料已清除');
 }
@@ -2337,8 +2484,8 @@ function showClearLocalDataModal(){
       </div>
     </section>`;
   const close=mountDangerModal(modal);
-  modal.querySelector('.confirm-action').onclick=()=>{
-    clearLocalStorage();
+  modal.querySelector('.confirm-action').onclick=async()=>{
+    await clearLocalStorage();
     close();
     location.reload();
   };
@@ -2384,7 +2531,11 @@ async function updateSetting(key,value){
       handleThresholdChange();
     }
     if(key==='saveNotesToCloud'&&value&&typeof syncCloudNotes==='function'){
-      syncCloudNotes().catch(error=>console.warn('Cloud note sync failed:',error));
+      syncCloudNotes().then(result=>{
+        if(!result?.changed)return;
+        applyHighlights();
+        if(!$('#notes-panel').hidden)renderNotes();
+      }).catch(error=>console.warn('Cloud note sync failed:',error));
     }
     if(key==='saveDivinationToCloud'&&value&&typeof syncCloudDivinations==='function'){
       syncCloudDivinations().catch(error=>console.warn('Cloud divination sync failed:',error));

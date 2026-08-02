@@ -9,40 +9,98 @@ function toLocalCloudNote(note) {
     comment: note.content,
     visibility: note.visibility,
     ownerId: note.author_id,
-    updatedAt: note.updated_at
+    updatedAt: note.updated_at,
+    serverVersion: note.updated_at,
+    syncStatus: 'synced'
   };
 }
 
+function indexLocalCloudNotes() {
+  const index = new Map();
+  for (const note of state.notes) {
+    if (note.id) index.set(String(note.id), note);
+    if (note.serverId) index.set(String(note.serverId), note);
+  }
+  return index;
+}
+
+async function syncCloudNote(note) {
+  if (!authManager.isLoggedIn || !canAccessLocalNote(note)) return null;
+  note.syncStatus = 'pending';
+  saveNotes();
+  try {
+    const response = note.serverId
+      ? await api.updateNote(note.serverId, {
+          content: note.comment,
+          visibility: note.visibility || 'private'
+        })
+      : await api.createNote({
+          articleType: note.doc?.startsWith('gua-') ? 'iching' : 'md',
+          articleId: note.doc,
+          paragraphAnchor: String(note.start || 0),
+          anchorOffsetStart: note.start || 0,
+          anchorOffsetEnd: note.end || 0,
+          content: note.comment,
+          visibility: note.visibility || 'private',
+          localUuid: note.id
+        });
+    const remote = response.note || response;
+    if (remote?.id) note.serverId = remote.id;
+    note.ownerId = remote?.author_id || authManager.getCurrentUser()?.id || note.ownerId || null;
+    note.updatedAt = remote?.updated_at || new Date().toISOString();
+    note.serverVersion = note.updatedAt;
+    note.syncStatus = 'synced';
+    saveNotes();
+    return remote;
+  } catch (error) {
+    note.syncStatus = navigator.onLine ? 'error' : 'offline';
+    saveNotes();
+    throw error;
+  }
+}
+
 async function performCloudNotesSync() {
-  if (!authManager.isLoggedIn) return;
+  if (!authManager.isLoggedIn) return { changed: false };
   const settingsResponse = await api.getUserSettings();
   const savePrivateNotes = Boolean(settingsResponse.settings?.saveNotesToCloud);
-
-  for (const note of state.notes) {
-    if (!canAccessLocalNote(note)) continue;
-    if (note.serverId || (!savePrivateNotes && note.visibility !== 'public')) continue;
-    const response = await api.createNote({
-      articleType: note.doc?.startsWith('gua-') ? 'iching' : 'md',
-      articleId: note.doc,
-      paragraphAnchor: String(note.start || 0),
-      anchorOffsetStart: note.start || 0,
-      anchorOffsetEnd: note.end || 0,
-      content: note.comment,
-      visibility: note.visibility || 'private',
-      localUuid: note.id
-    });
-    note.serverId = response.note.id;
-  }
+  let changed = false;
+  const pending = state.notes.filter(note =>
+    canAccessLocalNote(note) &&
+    !note.serverId &&
+    (note.visibility === 'public' || savePrivateNotes)
+  );
+  const uploadResults = await Promise.allSettled(pending.map(note => syncCloudNote(note)));
+  if (uploadResults.some(result => result.status === 'fulfilled')) changed = pending.length > 0;
 
   const response = await api.getMyNotes();
-  const localByKey = new Map(state.notes.map(note => [note.serverId || note.id, note]));
+  const localByKey = indexLocalCloudNotes();
   for (const remoteNote of response.notes || []) {
-    const key = remoteNote.local_uuid || remoteNote.id;
-    if (!localByKey.has(key)) state.notes.push(toLocalCloudNote(remoteNote));
+    const local = localByKey.get(String(remoteNote.local_uuid || '')) || localByKey.get(String(remoteNote.id));
+    if (!local) {
+      const normalized = toLocalCloudNote(remoteNote);
+      state.notes.push(normalized);
+      localByKey.set(String(normalized.id), normalized);
+      localByKey.set(String(normalized.serverId), normalized);
+      changed = true;
+      continue;
+    }
+    const wasChanged = local.serverId !== remoteNote.id ||
+      local.syncStatus !== 'synced' ||
+      (!['pending', 'error', 'offline'].includes(local.syncStatus) && local.updatedAt !== remoteNote.updated_at);
+    local.serverId = remoteNote.id;
+    local.ownerId = remoteNote.author_id;
+    const hasUnsyncedLocalChanges = ['pending', 'error', 'offline'].includes(local.syncStatus);
+    if (!hasUnsyncedLocalChanges) {
+      local.comment = remoteNote.content;
+      local.visibility = remoteNote.visibility;
+      local.updatedAt = remoteNote.updated_at;
+      local.syncStatus = 'synced';
+    }
+    local.serverVersion = remoteNote.updated_at;
+    changed = changed || wasChanged;
   }
   saveNotes();
-  applyHighlights();
-  if (!document.getElementById('notes-panel').hidden) renderNotes();
+  return { changed };
 }
 
 let cloudNotesSyncPromise = null;
@@ -84,6 +142,38 @@ async function syncCloudDivinations() {
   if (!document.getElementById('notes-panel').hidden) renderDivinations();
 }
 
+function handlePrivateNoteRealtimeUpdate(update) {
+  const remote = update?.data;
+  if (!remote?.id) return;
+  const localIndex = indexLocalCloudNotes();
+  const local = localIndex.get(String(remote.local_uuid || '')) || localIndex.get(String(remote.id));
+  if (local?._realtimeCommitTimestamp && update.commitTimestamp &&
+      local._realtimeCommitTimestamp > update.commitTimestamp) return;
+  if (update.event === 'DELETE' || remote.status !== 'active' || remote.deleted_at) {
+    if (local) state.notes = state.notes.filter(note => note !== local);
+  } else if (local) {
+    local.serverId = remote.id;
+    local.ownerId = remote.author_id;
+    local.serverVersion = remote.updated_at;
+    local._realtimeCommitTimestamp = update.commitTimestamp || null;
+    if (!['pending', 'error', 'offline'].includes(local.syncStatus)) {
+      local.comment = remote.content;
+      local.visibility = remote.visibility;
+      local.updatedAt = remote.updated_at;
+      local.syncStatus = 'synced';
+    }
+  } else {
+    const normalized = toLocalCloudNote(remote);
+    normalized._realtimeCommitTimestamp = update.commitTimestamp || null;
+    state.notes.push(normalized);
+  }
+  saveNotes();
+  const currentArticleId = document.querySelector('.annotatable')?.dataset.doc;
+  const changedArticleId = remote.article_id;
+  if (currentArticleId && currentArticleId === changedArticleId) applyHighlights({ refreshPublic: false });
+  if (!document.getElementById('notes-panel').hidden) renderNotes();
+}
+
 let realtimeAccountUserId = null;
 
 function syncAccountRealtimeSubscriptions() {
@@ -91,6 +181,7 @@ function syncAccountRealtimeSubscriptions() {
   if (realtimeAccountUserId && realtimeAccountUserId !== userId && typeof realtimeClient !== 'undefined') {
     realtimeClient.unsubscribe(`notifications:${realtimeAccountUserId}`).catch(() => {});
     realtimeClient.unsubscribe(`divinations:${realtimeAccountUserId}`).catch(() => {});
+    realtimeClient.unsubscribe(`private-notes:${realtimeAccountUserId}`).catch(() => {});
     realtimeAccountUserId = null;
   }
   if (!userId || typeof realtimeClient === 'undefined' || !realtimeClient.isEnabled) return;
@@ -99,6 +190,7 @@ function syncAccountRealtimeSubscriptions() {
     if (typeof handleNotificationRealtimeUpdate === 'function') handleNotificationRealtimeUpdate(update);
     else loadNotificationsList();
   });
+  realtimeClient.subscribeToPrivateNotes(userId, handlePrivateNoteRealtimeUpdate);
   realtimeClient.subscribeToDivinations(userId, () => syncCloudDivinations());
 }
 
