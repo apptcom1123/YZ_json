@@ -5,11 +5,23 @@ class AuthManager {
     this.requiresTerms = false;
     this.listeners = [];
     this.client = null;
+    this.initPromise = null;
     this.statusPromise = null;
     this.authRefreshQueue = Promise.resolve();
   }
 
   async init() {
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this.initializeClient();
+    try {
+      return await this.initPromise;
+    } catch (error) {
+      this.initPromise = null;
+      throw error;
+    }
+  }
+
+  async initializeClient() {
     const config = window.__SUPABASE_CONFIG__;
     if (!config?.supabaseUrl || !config?.supabasePublishableKey) {
       throw new Error('Supabase public configuration is unavailable.');
@@ -19,13 +31,17 @@ class AuthManager {
     this.client = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
       auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
-    this.client.auth.onAuthStateChange((_event, session) => {
+    this.client.auth.onAuthStateChange((event, session) => {
       if (session?.access_token) api.saveSessionToken(session.access_token);
       if (!session) api.clearSessionToken();
-      window.setTimeout(() => this.queueAuthStatusRefresh(), 0);
+      if (event !== 'INITIAL_SESSION') {
+        window.setTimeout(() => this.queueAuthStatusRefresh(), 0);
+      }
     });
-    const { data: { session } } = await this.client.auth.getSession();
+    const { data: { session }, error } = await this.client.auth.getSession();
+    if (error) throw error;
     if (session?.access_token) api.saveSessionToken(session.access_token);
+    else api.clearSessionToken();
     return this.checkAuthStatus();
   }
 
@@ -77,8 +93,6 @@ class AuthManager {
       const intentKey = window.ICHING_TERMS_LOGIN_INTENT_KEY || 'iching_terms_login_intent';
       const hasLoginIntent = sessionStorage.getItem(intentKey) === termsVersion;
       response = await api.getAuthStatus();
-      const trustedUserId = localStorage.getItem('iching_authenticated_user_id');
-      const isExistingBrowserSession = Boolean(response.user?.id && response.user.id === trustedUserId);
 
       if (response.requiresTerms && response.user) {
         if (!hasLoginIntent) {
@@ -90,11 +104,9 @@ class AuthManager {
           throw new Error('TERMS_STATUS_NOT_UPDATED');
         }
         response = await api.getAuthStatus();
-      }
-
-      if (response.loggedIn && response.user && !hasLoginIntent && !isExistingBrowserSession) {
-        await this.rejectUnconfirmedSession();
-        return { loggedIn: false, requiresTerms: false, user: null };
+        if (!response.loggedIn || response.requiresTerms) {
+          throw new Error('LOGIN_STATUS_NOT_UPDATED');
+        }
       }
 
       this.user = response.user || null;
