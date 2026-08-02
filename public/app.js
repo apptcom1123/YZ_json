@@ -29,6 +29,14 @@ let statsRequestVersion=0;
 const threadRealtimeSubscriptionIds=new Set();
 let threadRefreshTimer=null;
 let notificationCache=[];
+let notificationFetchedAt=0;
+let notificationLoadPromise=null;
+let favoritesCache=[];
+let favoritesFetchedAt=0;
+let favoritesLoadPromise=null;
+const personalNoteCache=new Map();
+const PERSONAL_CONTENT_CACHE_TTL=60000;
+const pendingEngagementActions=new Set();
 let notificationStatsTimer=null;
 const notificationRealtimeQueue=new Map();
 let notificationRenderFrame=null;
@@ -37,6 +45,11 @@ let threadReplyRenderFrame=null;
 const threadNoteRealtimeQueue=new Map();
 let threadNoteRenderFrame=null;
 let realtimeReconcileTimer=null;
+const threadRepliesCache=new Map();
+const threadPrefetchQueue=new Map();
+const THREAD_REPLIES_CACHE_TTL=60000;
+const THREAD_REPLIES_CACHE_LIMIT=30;
+let threadPrefetchScheduled=false;
 
 function applySettingsToControls(settings=DEFAULT_USER_SETTINGS){
   if($('#settings-save-notes'))$('#settings-save-notes').checked=Boolean(settings.saveNotesToCloud);
@@ -580,6 +593,7 @@ window.addEventListener('supabase-realtime-reconcile',()=>{
         const [noteResponse,repliesResponse]=await Promise.all([api.getNote(note.id),api.getNoteReplies(note.id)]);
         Object.assign(note,noteResponse?.note||noteResponse);
         note.replies=dedupeById(repliesResponse?.replies||[]);
+        cacheThreadReplies(note);
         if(window.threadData)renderThreadContent(note);
       }catch(error){
         console.warn('Realtime reconciliation failed:',error);
@@ -806,11 +820,15 @@ function renderBubbles(entries){
       
       // 綁定聚合氣泡事件
       bindClusterBubble(bubble,cluster);
+      queueThreadPrefetch([cluster[0]?.note]);
     });
   }
 }
 
 function bindClusterBubble(bubble,cluster){
+  const prefetch=()=>queueThreadPrefetch(orderedThreadCluster(cluster).slice(0,2).map(entry=>entry.note));
+  bubble.addEventListener('pointerenter',prefetch,{once:true,passive:true});
+  bubble.addEventListener('focus',prefetch,{once:true});
   bubble.addEventListener('dblclick',e=>{
     e.preventDefault();
     openThreadModal(cluster);
@@ -824,10 +842,112 @@ function bindBubble(bubble,note){
   bubble.addEventListener('dblclick',e=>{e.preventDefault();hideBubble();openAnnotationModal(note);});
 }
 
-async function hydrateThreadNote(note){
-  const response=await api.getNoteReplies(note.id);
-  note.replies=response.replies||[];
-  return note;
+function pruneThreadRepliesCache(){
+  if(threadRepliesCache.size<=THREAD_REPLIES_CACHE_LIMIT)return;
+  [...threadRepliesCache.entries()]
+    .sort((a,b)=>(a[1].accessedAt||0)-(b[1].accessedAt||0))
+    .slice(0,threadRepliesCache.size-THREAD_REPLIES_CACHE_LIMIT)
+    .forEach(([noteId])=>threadRepliesCache.delete(noteId));
+}
+
+function applyCachedThreadReplies(note){
+  const cached=threadRepliesCache.get(note.id);
+  if(!cached?.replies)return false;
+  cached.accessedAt=Date.now();
+  note.replies=cached.replies;
+  return true;
+}
+
+function cacheThreadReplies(note,replies=note.replies||[]){
+  const normalized=dedupeById(replies);
+  note.replies=normalized;
+  threadRepliesCache.set(note.id,{
+    replies:normalized,
+    fetchedAt:Date.now(),
+    accessedAt:Date.now(),
+    promise:null
+  });
+  pruneThreadRepliesCache();
+}
+
+async function hydrateThreadNote(note,{force=false}={}){
+  const cached=threadRepliesCache.get(note.id);
+  if(cached?.replies)applyCachedThreadReplies(note);
+  if(!force&&cached?.replies&&Date.now()-cached.fetchedAt<THREAD_REPLIES_CACHE_TTL){
+    note.repliesLoading=false;
+    return note;
+  }
+  if(cached?.promise){
+    note.repliesLoading=!cached.replies;
+    await cached.promise;
+    applyCachedThreadReplies(note);
+    note.repliesLoading=false;
+    return note;
+  }
+  note.repliesLoading=!cached?.replies;
+  const request=api.getNoteReplies(note.id).then(response=>{
+    cacheThreadReplies(note,response.replies||[]);
+    note.repliesLoading=false;
+    return note;
+  }).catch(error=>{
+    note.repliesLoading=false;
+    const failed=threadRepliesCache.get(note.id);
+    if(failed)failed.promise=null;
+    throw error;
+  });
+  threadRepliesCache.set(note.id,{
+    replies:cached?.replies||null,
+    fetchedAt:cached?.fetchedAt||0,
+    accessedAt:Date.now(),
+    promise:request
+  });
+  return request;
+}
+
+function queueThreadPrefetch(notes){
+  (notes||[]).forEach(note=>{
+    const cached=threadRepliesCache.get(note?.id);
+    if(note?.id&&(!cached?.replies||Date.now()-cached.fetchedAt>=THREAD_REPLIES_CACHE_TTL)){
+      threadPrefetchQueue.set(note.id,note);
+    }
+  });
+  if(threadPrefetchScheduled||!threadPrefetchQueue.size)return;
+  threadPrefetchScheduled=true;
+  const run=()=>{
+    threadPrefetchScheduled=false;
+    const candidates=[...threadPrefetchQueue.values()].slice(0,4);
+    threadPrefetchQueue.clear();
+    Promise.allSettled(candidates.map(note=>hydrateThreadNote(note)));
+  };
+  if('requestIdleCallback' in window)window.requestIdleCallback(run,{timeout:1200});
+  else setTimeout(run,180);
+}
+
+function renderThreadNoteImmediately(note){
+  const hasCachedReplies=applyCachedThreadReplies(note);
+  note.repliesLoading=!hasCachedReplies;
+  renderThreadContent(note);
+  hydrateThreadNote(note).then(()=>{
+    const current=window.threadData?.cluster?.[window.threadData.currentIndex]?.note;
+    if(current?.id===note.id)renderThreadContent(note);
+  }).catch(error=>console.warn('Thread preload failed:',error));
+}
+
+function applyOptimisticVote(target,voteType){
+  const snapshot={
+    userVote:target.userVote||null,
+    upvote_count:Number(target.upvote_count)||0,
+    downvote_count:Number(target.downvote_count)||0,
+    score:Number(target.score)||0
+  };
+  const nextVote=voteType==='none'||snapshot.userVote===voteType?null:voteType;
+  if(snapshot.userVote==='up')target.upvote_count=Math.max(0,snapshot.upvote_count-1);
+  if(snapshot.userVote==='down')target.downvote_count=Math.max(0,snapshot.downvote_count-1);
+  if(nextVote==='up')target.upvote_count++;
+  if(nextVote==='down')target.downvote_count++;
+  target.userVote=nextVote;
+  target.score=target.upvote_count-target.downvote_count;
+  return snapshot;
 }
 
 function orderedThreadCluster(cluster){
@@ -881,6 +1001,7 @@ function queueThreadReplyRealtimeUpdate(note,update){
     });
     threadReplyRealtimeQueue.clear();
     touchedNotes.forEach(targetNote=>{
+      cacheThreadReplies(targetNote);
       if(window.threadData)renderThreadContent(targetNote);
     });
   });
@@ -914,7 +1035,7 @@ async function openThreadModal(cluster){
   const backdrop=$('#backdrop');
   
   try{
-    await hydrateThreadNote(cluster[0].note);
+    renderThreadNoteImmediately(cluster[0].note);
   }catch(error){
     console.warn('無法載入討論回覆:',error);
   }
@@ -964,8 +1085,7 @@ async function openThreadModal(cluster){
     if(window.threadData.currentIndex>0){
       window.threadData.currentIndex--;
       const note=cluster[window.threadData.currentIndex].note;
-      await hydrateThreadNote(note).catch(()=>{});
-      renderThreadContent(note);
+      renderThreadNoteImmediately(note);
     }
   };
   
@@ -973,8 +1093,7 @@ async function openThreadModal(cluster){
     if(window.threadData.currentIndex<cluster.length-1){
       window.threadData.currentIndex++;
       const note=cluster[window.threadData.currentIndex].note;
-      await hydrateThreadNote(note).catch(()=>{});
-      renderThreadContent(note);
+      renderThreadNoteImmediately(note);
     }
   };
   
@@ -991,22 +1110,40 @@ async function openThreadModal(cluster){
       return;
     }
 
+    const currentNote=cluster[window.threadData.currentIndex].note;
+    const mutationId=crypto.randomUUID?.()||`${Date.now()}-${Math.random()}`;
+    const temporaryId=`pending-${mutationId}`;
+    const temporaryReply={
+      id:temporaryId,note_id:currentNote.id,author_id:currentUserId(),content:text,
+      status:'active',created_at:new Date().toISOString(),upvote_count:0,downvote_count:0,
+      userVote:null,public_display_name:authManager.getCurrentUser?.()?.public_display_name||'我',_pending:true
+    };
+    if(!currentNote.replies)currentNote.replies=[];
+    currentNote.replies.push(temporaryReply);
+    currentNote.reply_count=(Number(currentNote.reply_count)||0)+1;
+    $('#thread-reply-text').value='';
+    renderThreadContent(currentNote);
     try{
       submitButton.disabled=true;
-      const currentNote=cluster[window.threadData.currentIndex].note;
-      const mutationId=crypto.randomUUID?.()||`${Date.now()}-${Math.random()}`;
       const result=await api.addReply(currentNote.id,text,null,mutationId);
-      
-      if(!currentNote.replies)currentNote.replies=[];
-      if(result.reply&&!currentNote.replies.some(reply=>reply.id===result.reply.id)){
+      const temporaryIndex=currentNote.replies.findIndex(reply=>reply.id===temporaryId);
+      const existingIndex=result.reply?currentNote.replies.findIndex(reply=>reply.id===result.reply.id):-1;
+      if(temporaryIndex>=0){
+        if(existingIndex>=0&&existingIndex!==temporaryIndex)currentNote.replies.splice(temporaryIndex,1);
+        else if(result.reply)currentNote.replies.splice(temporaryIndex,1,result.reply);
+      }else if(result.reply&&existingIndex<0){
         currentNote.replies.push(result.reply);
       }
-      
-      $('#thread-reply-text').value='';
+      cacheThreadReplies(currentNote);
       renderThreadContent(currentNote);
       toast('回覆成功');
     }catch(err){
       console.error('回覆失敗:',err);
+      currentNote.replies=currentNote.replies.filter(reply=>reply.id!==temporaryId);
+      currentNote.reply_count=Math.max(0,(Number(currentNote.reply_count)||1)-1);
+      $('#thread-reply-text').value=text;
+      cacheThreadReplies(currentNote);
+      renderThreadContent(currentNote);
       toast('回覆失敗');
     }finally{
       submitButton.disabled=false;
@@ -1034,9 +1171,9 @@ function renderThreadContent(note){
           <span style="color:#999;font-size:0.85rem"> · ${new Date(note.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
-          <button class="thread-vote" data-note-id="${note.id}" data-vote="up" style="background:none;border:none;cursor:pointer">👍 ${note.upvote_count||0}</button>
-          <button class="thread-vote" data-note-id="${note.id}" data-vote="down" style="background:none;border:none;cursor:pointer">👎 ${note.downvote_count||0}</button>
-          <button class="thread-favorite" data-note-id="${note.id}" style="background:none;border:none;cursor:pointer">⭐ ${note.favorite_count||0}</button>
+          <button class="thread-vote" data-note-id="${note.id}" data-vote="up" style="background:none;border:none;cursor:pointer">▲ ${note.upvote_count||0}</button>
+          <button class="thread-vote" data-note-id="${note.id}" data-vote="down" style="background:none;border:none;cursor:pointer">▼ ${note.downvote_count||0}</button>
+          <button class="thread-favorite" data-note-id="${note.id}" style="background:none;border:none;cursor:pointer">✦ ${note.favorite_count||0}</button>
           ${canEditNote?`<button class="thread-edit-note" type="button" style="background:none;border:none;cursor:pointer">編輯</button>`:''}
         </div>
       </div>
@@ -1046,7 +1183,9 @@ function renderThreadContent(note){
   
   // 回覆列表
   const replies=orderedReplies(flattenReplies(note.replies||[]),window.threadData?.replySort);
-  const repliesHTML=replies.length ? replies.map((r,i)=>`
+  const repliesHTML=note.repliesLoading&&!replies.length
+    ? '<div style="padding:16px;text-align:center;color:#888;background:#fafafa">正在載入回覆...</div>'
+    : replies.length ? replies.map((r,i)=>`
     <div style="padding:12px;padding-left:${Math.min(88,32+(r._depth||0)*18)}px;border-bottom:1px solid #eee;background:#fafafa">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
@@ -1102,6 +1241,7 @@ function renderThreadContent(note){
         try{
           const response=await api.getNoteReplies(note.id);
           note.replies=dedupeById(response.replies||[]);
+          cacheThreadReplies(note);
           if(window.threadData)renderThreadContent(note);
         }catch(err){
           console.warn('Reply refresh failed:',err);
@@ -1238,6 +1378,11 @@ function openNotes(){
   
   // 加載占卜紀錄
   renderDivinations();
+  if(authManager?.isLoggedIn){
+    const prefetch=()=>Promise.allSettled([loadFavoritesList(),loadNotificationsList()]);
+    if('requestIdleCallback' in window)window.requestIdleCallback(prefetch,{timeout:1000});
+    else setTimeout(prefetch,100);
+  }
   
   // 顯示面板
   panel.hidden=false;
@@ -2076,18 +2221,15 @@ function showDeleteDataModal(){
 }
 
 // ===== 收藏列表 =====
-async function loadFavoritesList(){
-  try{
-    const response=await api.getUserFavorites();
-    const favoritesList=$('#favorites-list');
-    
-    if(!response||!response.notes||response.notes.length===0){
-      favoritesList.innerHTML='<div style="padding:12px;text-align:center;color:#888">&#23578;&#28961;&#25910;&#34255;</div>';
-      return;
-    }
-    
-    const html=response.notes.map(note=>`
-      <div class="favorite-card" style="padding:12px;border:1px solid #ddd;border-radius:4px;margin-bottom:8px;cursor:pointer;transition:all 0.2s;background:#fff" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'" onmouseout="this.style.boxShadow='none'" onclick="navigateToFavorite('${note.id}','${note.article_id}')">
+function renderFavoritesCache(){
+  const favoritesList=$('#favorites-list');
+  if(!favoritesList)return;
+  if(!favoritesCache.length){
+    favoritesList.innerHTML='<div style="padding:12px;text-align:center;color:#888">&#23578;&#28961;&#25910;&#34255;</div>';
+    return;
+  }
+  favoritesList.innerHTML=favoritesCache.map(note=>`
+      <div class="favorite-card" data-note-id="${esc(note.id)}" style="padding:12px;border:1px solid #ddd;border-radius:4px;margin-bottom:8px;cursor:pointer;transition:all 0.2s;background:#fff" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'" onmouseout="this.style.boxShadow='none'" onclick="navigateToFavorite('${esc(note.id)}','${esc(note.article_id)}')">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
           <div>
             <strong style="color:#333">${esc(note.public_alias||'匿名使用者')}</strong>
@@ -2095,7 +2237,7 @@ async function loadFavoritesList(){
           </div>
           <div style="text-align:right;font-size:0.85rem;color:#888">
             <div>💬 ${note.reply_count||0} 個回覆</div>
-            <div>👍 ${note.upvote_count||0}</div>
+            <div>▲ ${note.upvote_count||0}</div>
           </div>
         </div>
         <p style="color:#333;line-height:1.5;margin:8px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(note.content)}</p>
@@ -2104,31 +2246,91 @@ async function loadFavoritesList(){
         </div>
       </div>
     `).join('');
-    
-    favoritesList.innerHTML=html;
-  }catch(err){
+  favoritesList.querySelectorAll('.favorite-card').forEach(card=>{
+    const prefetch=()=>prefetchPersonalNote(card.dataset.noteId);
+    card.addEventListener('pointerenter',prefetch,{once:true,passive:true});
+    card.addEventListener('focusin',prefetch,{once:true});
+  });
+}
+
+async function loadFavoritesList({force=false}={}){
+  if(!authManager?.isLoggedIn){
+    favoritesCache=[];
+    favoritesFetchedAt=0;
+    renderFavoritesCache();
+    return;
+  }
+  if(favoritesCache.length)renderFavoritesCache();
+  if(!force&&Date.now()-favoritesFetchedAt<PERSONAL_CONTENT_CACHE_TTL)return favoritesCache;
+  if(favoritesLoadPromise)return favoritesLoadPromise;
+  favoritesLoadPromise=api.getUserFavorites().then(response=>{
+    favoritesCache=dedupeById(response?.notes||[]);
+    favoritesFetchedAt=Date.now();
+    favoritesCache.forEach(note=>personalNoteCache.set(note.id,{note,fetchedAt:favoritesFetchedAt}));
+    renderFavoritesCache();
+    return favoritesCache;
+  }).catch(err=>{
     console.error('加載收藏列表失敗:',err);
-    const favoritesList=$('#favorites-list');
-    favoritesList.innerHTML='<div style="padding:12px;text-align:center;color:#888">尚無收藏</div>';
+    if(!favoritesCache.length)renderFavoritesCache();
+    return favoritesCache;
+  }).finally(()=>{favoritesLoadPromise=null;});
+  return favoritesLoadPromise;
+}
+
+function articleHash(articleId=''){
+  if(articleId.startsWith('gua-'))return `gua/${articleId.slice(4)}`;
+  if(articleId.startsWith('text-'))return `text/${articleId.slice(5)}`;
+  return articleId.replace(/^#/,'').replace('-', '/');
+}
+
+async function prefetchPersonalNote(noteId){
+  if(!noteId)return null;
+  const cached=personalNoteCache.get(noteId);
+  if(cached&&Date.now()-cached.fetchedAt<PERSONAL_CONTENT_CACHE_TTL){
+    queueThreadPrefetch([cached.note]);
+    return cached.note;
+  }
+  const seeded=favoritesCache.find(note=>note.id===noteId);
+  if(seeded){
+    personalNoteCache.set(noteId,{note:seeded,fetchedAt:Date.now()});
+    queueThreadPrefetch([seeded]);
+    return seeded;
+  }
+  const request=api.getNote(noteId).then(response=>{
+    const note=response?.note||response;
+    if(note?.id){
+      personalNoteCache.set(note.id,{note,fetchedAt:Date.now()});
+      queueThreadPrefetch([note]);
+    }
+    return note;
+  });
+  personalNoteCache.set(noteId,{note:null,fetchedAt:0,promise:request});
+  try{return await request;}finally{
+    const entry=personalNoteCache.get(noteId);
+    if(entry?.promise===request&&!entry.note)personalNoteCache.delete(noteId);
+  }
+}
+
+async function navigateToPersonalNote(noteId,articleId=''){
+  try{
+    const note=await prefetchPersonalNote(noteId);
+    if(!note||note.deleted_at)throw Object.assign(new Error('NOTE_NOT_FOUND'),{status:404});
+    const targetArticle=note.article_id||articleId;
+    window.publicNotesByArticle=window.publicNotesByArticle||{};
+    const articleNotes=window.publicNotesByArticle[targetArticle]||[];
+    if(!articleNotes.some(item=>item.id===note.id))articleNotes.push(note);
+    window.publicNotesByArticle[targetArticle]=articleNotes;
+    $('#notes-panel').hidden=true;
+    window.location.hash=articleHash(targetArticle);
+    openThreadModal([{note}]);
+  }catch(err){
+    console.error('載入相關註記失敗:',err);
+    alert(err.status===404||err.message?.includes('404')?'抱歉，該內容已被刪除。':'無法載入該內容，請稍後重試。');
   }
 }
 
 function navigateToFavorite(noteId,articleId){
-  // 導航到原文章
-  const guaId=articleId.split('-')[1];
-  window.location.hash=`gua/${guaId}`;
-  
-  // 等待頁面加載後打開討論串
-  setTimeout(()=>{
-    const notes=window.publicNotesByArticle?.[articleId];
-    if(notes){
-      const note=notes.find(n=>n.id===noteId);
-      if(note){
-        const cluster=[{note}];
-        openThreadModal(cluster);
-      }
-    }
-  },500);
+  navigateToPersonalNote(noteId,articleId);
 }
 
 // ===== 通知列表 =====
@@ -2148,8 +2350,8 @@ async function loadNotificationsListLegacy(){
           <div>
             <strong style="color:#333">${
               notif.type==='reply'?'💬 有人回覆了你的註記':
-              notif.type==='vote'?'👍 有人讚了你的註記':
-              notif.type==='favorite'?'⭐ 有人收藏了你的註記':'新通知'
+              notif.type==='vote'?'▲ 有人讚了你的註記':
+              notif.type==='favorite'?'✦ 有人收藏了你的註記':'新通知'
             }</strong>
           </div>
           <span style="font-size:0.85rem;color:#999">${new Date(notif.created_at).toLocaleDateString('zh-TW')}</span>
@@ -2191,18 +2393,25 @@ async function loadNotificationsList(){
   const list=$('#notifications-list');
   if(!authManager?.isLoggedIn){
     notificationCache=[];
+    notificationFetchedAt=0;
     renderNotificationCache();
     return;
   }
-  try{
-    const response=await api.getNotifications();
+  if(notificationCache.length)renderNotificationCache();
+  if(Date.now()-notificationFetchedAt<PERSONAL_CONTENT_CACHE_TTL)return notificationCache;
+  if(notificationLoadPromise)return notificationLoadPromise;
+  notificationLoadPromise=api.getNotifications().then(response=>{
     notificationCache=dedupeById(response?.notifications||[])
       .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    notificationFetchedAt=Date.now();
     renderNotificationCache();
-  }catch(err){
+    return notificationCache;
+  }).catch(err=>{
     console.error('Notification refresh failed:',err);
     if(!notificationCache.length&&list)list.innerHTML='<div style="padding:12px;text-align:center;color:#888">尚無通知</div>';
-  }
+    return notificationCache;
+  }).finally(()=>{notificationLoadPromise=null;});
+  return notificationLoadPromise;
 }
 
 function handleNotificationRealtimeUpdate(update){
@@ -2228,6 +2437,7 @@ function handleNotificationRealtimeUpdate(update){
       }
     });
     notificationRealtimeQueue.clear();
+    notificationFetchedAt=Date.now();
     notificationCache.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     renderNotificationCache();
     clearTimeout(notificationStatsTimer);
@@ -2236,39 +2446,15 @@ function handleNotificationRealtimeUpdate(update){
 }
 
 function navigateToNotification(notificationId,referenceId){
-  // 標記為已讀
-  api.markNotificationAsRead(notificationId).catch(()=>{});
-  
-  // 導航到相關注記（需要先查詢該注記的信息）
-  api.getNote(referenceId).then(response=>{
-    const note=response?.note||response;
-    // 檢查內容是否已被刪除
-    if(!note||note.deleted_at){
-      alert('抱歉，該內容已被刪除。');
-      return;
-    }
-    
-    const guaId=note.article_id.split('-')[1];
-    window.location.hash=`gua/${guaId}`;
-    
-    setTimeout(()=>{
-      const notes=window.publicNotesByArticle?.[note.article_id];
-      if(notes){
-        const targetNote=notes.find(n=>n.id===referenceId);
-        if(targetNote){
-          const cluster=[{note:targetNote}];
-          openThreadModal(cluster);
-        }
-      }
-    },500);
-  }).catch(err=>{
-    console.error('獲取通知相關注記失敗:',err);
-    if(err.status===404||err.message.includes('404')){
-      alert('抱歉，該內容已被刪除。');
-    }else{
-      alert('無法載入該內容，請稍後重試。');
-    }
+  const notification=notificationCache.find(item=>item.id===notificationId);
+  if(notification&&!notification.read_at){
+    notification.read_at=new Date().toISOString();
+    renderNotificationCache();
+  }
+  api.markNotificationAsRead(notificationId).catch(()=>{
+    notificationFetchedAt=0;
   });
+  navigateToPersonalNote(referenceId);
 }
 
 function showDeleteAccountModal(){

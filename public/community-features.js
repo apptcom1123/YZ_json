@@ -324,15 +324,15 @@ class CommunityFeatures {
               <div class="note-author">${note.public_alias || '匿名使用者'}</div>
               <div class="note-content">${this.escapeHtml(note.content)}</div>
               <div class="note-stats">
-                <span>👍 ${note.upvote_count}</span>
-                <span>👎 ${note.downvote_count}</span>
-                <span>⭐ ${note.favorite_count}</span>
+                <span>▲ ${note.upvote_count}</span>
+                <span>▼ ${note.downvote_count}</span>
+                <span>✦ ${note.favorite_count}</span>
               </div>
               ${authManager.isAuthenticated() ? `
                 <div class="note-actions">
-                  <button class="vote-up" data-note-id="${note.id}">👍</button>
-                  <button class="vote-down" data-note-id="${note.id}">👎</button>
-                  <button class="favorite" data-note-id="${note.id}">⭐</button>
+                  <button class="vote-up" data-note-id="${note.id}">▲</button>
+                  <button class="vote-down" data-note-id="${note.id}">▼</button>
+                  <button class="favorite" data-note-id="${note.id}">✦</button>
                 </div>
               ` : ''}
             </div>
