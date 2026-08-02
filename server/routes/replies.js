@@ -30,9 +30,13 @@ router.get('/:noteId/replies', optionalAuth, async (req, res) => {
     }
     const replies = await replyRepo.getNoteReplies(req.params.noteId);
     if(req.user){
-      const flatReplies=flattenReplyTree(replies);
-      const votes=await replyRepo.getUserVotesForReplies(flatReplies.map(reply=>reply.id),req.user.userId);
-      flatReplies.forEach(reply=>{reply.userVote=votes.get(reply.id)||null;});
+      try{
+        const flatReplies=flattenReplyTree(replies);
+        const votes=await replyRepo.getUserVotesForReplies(flatReplies.map(reply=>reply.id),req.user.userId);
+        flatReplies.forEach(reply=>{reply.userVote=votes.get(reply.id)||null;});
+      }catch(voteError){
+        console.warn('Reply vote lookup failed:',voteError.message);
+      }
     }
 
     res.json({

@@ -89,7 +89,7 @@ export class NoteReplyRepository extends BaseRepository {
     if (this.isSupabase) {
       let query = this.db
         .from('note_replies')
-        .select('*, users(public_display_name)')
+        .select('*')
         .eq('note_id', noteId)
         .order('upvote_count', { ascending: false })
         .order('created_at', { ascending: false });
@@ -99,9 +99,20 @@ export class NoteReplyRepository extends BaseRepository {
       const { data, error } = await query;
       if (error) throw error;
 
-      return this.buildReplyTree((data || []).map(reply => ({
+      const replies=data||[];
+      const authorIds=[...new Set(replies.map(reply=>reply.author_id).filter(Boolean))];
+      let displayNames=new Map();
+      if(authorIds.length){
+        const {data:users,error:usersError}=await this.db
+          .from('users')
+          .select('id,public_display_name')
+          .in('id',authorIds);
+        if(usersError)console.warn('Reply author lookup failed:',usersError.message);
+        else displayNames=new Map((users||[]).map(user=>[user.id,user.public_display_name]));
+      }
+      return this.buildReplyTree(replies.map(reply=>({
         ...reply,
-        public_display_name: reply.users?.public_display_name
+        public_display_name:displayNames.get(reply.author_id)||null
       })));
     }
 

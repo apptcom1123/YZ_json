@@ -1035,6 +1035,7 @@ function cacheThreadReplies(note,replies=note.replies||[]){
 
 async function hydrateThreadNote(note,{force=false}={}){
   const cached=threadRepliesCache.get(note.id);
+  note.repliesError=null;
   if(cached?.replies)applyCachedThreadReplies(note);
   if(!force&&cached?.replies&&Date.now()-cached.fetchedAt<THREAD_REPLIES_CACHE_TTL){
     note.repliesLoading=false;
@@ -1051,9 +1052,11 @@ async function hydrateThreadNote(note,{force=false}={}){
   const request=api.getNoteReplies(note.id).then(response=>{
     cacheThreadReplies(note,response.replies||[]);
     note.repliesLoading=false;
+    note.repliesError=null;
     return note;
   }).catch(error=>{
     note.repliesLoading=false;
+    note.repliesError=error;
     const failed=threadRepliesCache.get(note.id);
     if(failed)failed.promise=null;
     throw error;
@@ -1093,7 +1096,11 @@ function renderThreadNoteImmediately(note){
   hydrateThreadNote(note).then(()=>{
     const current=window.threadData?.cluster?.[window.threadData.currentIndex]?.note;
     if(current?.id===note.id)renderThreadContent(note);
-  }).catch(error=>console.warn('Thread preload failed:',error));
+  }).catch(error=>{
+    console.warn('Thread preload failed:',error);
+    const current=window.threadData?.cluster?.[window.threadData.currentIndex]?.note;
+    if(current?.id===note.id)renderThreadContent(note);
+  });
 }
 
 function applyOptimisticVote(target,voteType){
@@ -1454,7 +1461,9 @@ function renderThreadContent(note){
   
   // 回覆列表
   const replies=orderedReplies(flattenReplies(note.replies||[]),window.threadData?.replySort);
-  const repliesHTML=note.repliesLoading&&!replies.length
+  const repliesHTML=note.repliesError&&!replies.length
+    ? '<div class="thread-replies-error" style="padding:16px;text-align:center;color:#888;background:#fafafa">回覆載入失敗<br><button class="thread-replies-retry mini-btn" type="button" style="margin-top:8px">重新載入</button></div>'
+    : note.repliesLoading&&!replies.length
     ? '<div style="padding:16px;text-align:center;color:#888;background:#fafafa">正在載入回覆...</div>'
     : replies.length ? replies.map((r,i)=>`
     <div class="thread-reply${r._justInserted?' thread-reply-enter':''}" data-reply-id="${r.id}" style="padding-left:${Math.min(88,32+(r._depth||0)*18)}px">
@@ -1479,6 +1488,14 @@ function renderThreadContent(note){
     if(original)original._justInserted=false;
   });
   const editButton=container.querySelector('.thread-edit-note');
+  const retryRepliesButton=container.querySelector('.thread-replies-retry');
+  if(retryRepliesButton){
+    retryRepliesButton.onclick=()=>{
+      threadRepliesCache.delete(note.id);
+      note.repliesError=null;
+      renderThreadNoteImmediately(note);
+    };
+  }
   if(editButton){
     editButton.onclick=()=>{
       let localNote=state.notes.find(item=>item.serverId===note.id&&canAccessLocalNote(item));
