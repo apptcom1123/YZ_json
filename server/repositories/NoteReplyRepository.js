@@ -9,6 +9,25 @@ export class NoteReplyRepository extends BaseRepository {
    * 在註記上添加回覆
    */
   async addReply(noteId, authorId, content, parentReplyId = null) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('note_replies')
+        .insert({
+          note_id: noteId,
+          parent_reply_id: parentReplyId,
+          author_id: authorId,
+          content,
+          status: 'active'
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+
+      await this.updateNoteReplyCount(noteId);
+      if (parentReplyId) await this.updateReplyCount(parentReplyId);
+      return data.id;
+    }
+
     const query = `
       INSERT INTO note_replies (note_id, parent_reply_id, author_id, content, status)
       VALUES (?, ?, ?, ?, 'active')
@@ -38,6 +57,24 @@ export class NoteReplyRepository extends BaseRepository {
    * 獲取註記的所有回覆（包含子回覆）
    */
   async getNoteReplies(noteId, includeDeleted = false) {
+    if (this.isSupabase) {
+      let query = this.db
+        .from('note_replies')
+        .select('*, users(public_display_name)')
+        .eq('note_id', noteId)
+        .order('created_at', { ascending: true });
+
+      if (!includeDeleted) query = query.eq('status', 'active');
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      return this.buildReplyTree((data || []).map(reply => ({
+        ...reply,
+        public_display_name: reply.users?.public_display_name
+      })));
+    }
+
     let query = `
       SELECT nr.*, u.public_display_name
       FROM note_replies nr
@@ -92,6 +129,16 @@ export class NoteReplyRepository extends BaseRepository {
       throw new Error('NOT_REPLY_OWNER');
     }
 
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('note_replies')
+        .update({ content, updated_at: new Date().toISOString() })
+        .eq('id', replyId)
+        .eq('author_id', userId);
+      if (error) throw error;
+      return this.findById(replyId);
+    }
+
     const query = `
       UPDATE note_replies
       SET content = ?, updated_at = CURRENT_TIMESTAMP
@@ -109,6 +156,17 @@ export class NoteReplyRepository extends BaseRepository {
     const reply = await this.findById(replyId);
     if (reply.author_id !== userId) {
       throw new Error('NOT_REPLY_OWNER');
+    }
+
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('note_replies')
+        .update({ status: 'deleted', updated_at: new Date().toISOString() })
+        .eq('id', replyId)
+        .eq('author_id', userId);
+      if (error) throw error;
+      await this.updateNoteReplyCount(reply.note_id);
+      return;
     }
 
     const query = `
@@ -151,6 +209,15 @@ export class NoteReplyRepository extends BaseRepository {
    * 重新計算回覆分數
    */
   async updateReplyScore(replyId) {
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('note_replies')
+        .update({ upvote_count: 0, downvote_count: 0 })
+        .eq('id', replyId);
+      if (error) throw error;
+      return;
+    }
+
     // 注：在實現中，我們將投票存在 note_votes 上
     // 這裡簡化版本，實際應該有單獨的 reply_votes 表
     const query = `
@@ -167,6 +234,22 @@ export class NoteReplyRepository extends BaseRepository {
    * 更新註記的回覆計數
    */
   async updateNoteReplyCount(noteId) {
+    if (this.isSupabase) {
+      const { count, error: countError } = await this.db
+        .from('note_replies')
+        .select('*', { count: 'exact', head: true })
+        .eq('note_id', noteId)
+        .eq('status', 'active');
+      if (countError) throw countError;
+
+      const { error } = await this.db
+        .from('notes')
+        .update({ reply_count: count || 0 })
+        .eq('id', noteId);
+      if (error) throw error;
+      return;
+    }
+
     const count = await this.db.get(`
       SELECT COUNT(*) as total 
       FROM note_replies 
@@ -184,6 +267,10 @@ export class NoteReplyRepository extends BaseRepository {
    * 更新回覆計數（遞歸計算子回覆）
    */
   async updateReplyCount(replyId) {
+    if (this.isSupabase) {
+      return;
+    }
+
     const count = await this.db.get(`
       SELECT COUNT(*) as total 
       FROM note_replies 
@@ -198,6 +285,21 @@ export class NoteReplyRepository extends BaseRepository {
    * 獲取用戶的所有回覆
    */
   async getUserReplies(userId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('note_replies')
+        .select('*, notes(article_id, paragraph_anchor)')
+        .eq('author_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(reply => ({
+        ...reply,
+        article_id: reply.notes?.article_id,
+        paragraph_anchor: reply.notes?.paragraph_anchor
+      }));
+    }
+
     const query = `
       SELECT nr.*, n.article_id, n.paragraph_anchor
       FROM note_replies nr
@@ -213,6 +315,32 @@ export class NoteReplyRepository extends BaseRepository {
    * 獲取收到的回覆（有人回覆我的註記）
    */
   async getRepliesReceivedByUser(userId) {
+    if (this.isSupabase) {
+      const { data: notes, error: notesError } = await this.db
+        .from('notes')
+        .select('id')
+        .eq('author_id', userId);
+      if (notesError) throw notesError;
+
+      const noteIds = (notes || []).map(note => note.id);
+      if (noteIds.length === 0) return [];
+
+      const { data, error } = await this.db
+        .from('note_replies')
+        .select('*, users(public_display_name), notes(author_id)')
+        .in('note_id', noteIds)
+        .neq('author_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      return (data || []).map(reply => ({
+        ...reply,
+        note_author_id: reply.notes?.author_id,
+        public_display_name: reply.users?.public_display_name
+      }));
+    }
+
     const query = `
       SELECT nr.*, n.author_id as note_author_id, u.public_display_name
       FROM note_replies nr

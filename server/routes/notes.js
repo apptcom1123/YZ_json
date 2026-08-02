@@ -88,11 +88,22 @@ router.post('/', requireAuth, async (req, res) => {
     const { note: noteRepo, user: userRepo } = req.app.locals.repositories;
 
     // 檢查用戶設置
-    const settings = await userRepo.db.get(`
-      SELECT allow_public_notes FROM user_settings WHERE user_id = ?
-    `, [req.user.userId]);
+    let settings;
+    if (userRepo.isSupabase) {
+      const { data, error } = await userRepo.db
+        .from('user_settings')
+        .select('allow_public_notes')
+        .eq('user_id', req.user.userId)
+        .maybeSingle();
+      if (error) throw error;
+      settings = data;
+    } else {
+      settings = await userRepo.db.get(`
+        SELECT allow_public_notes FROM user_settings WHERE user_id = ?
+      `, [req.user.userId]);
+    }
 
-    if (visibility === 'public' && !settings?.allow_public_notes) {
+    if (visibility === 'public' && !(settings?.allow_public_notes === true || settings?.allow_public_notes === 1)) {
       return res.status(403).json({
         error: 'PUBLIC_NOTES_DISABLED',
         message: '您未啟用公開註記功能'
@@ -316,12 +327,24 @@ router.post('/:id/favorite', requireAuth, async (req, res) => {
  */
 router.get('/:id/favorites', async (req, res) => {
   try {
-    const favorites = await req.app.locals.repositories.note.db.all(`
-      SELECT u.id, u.public_display_name FROM note_favorites nf
-      JOIN users u ON nf.user_id = u.id
-      WHERE nf.note_id = ?
-      ORDER BY nf.created_at DESC
-    `, [req.params.id]);
+    const { note: noteRepo } = req.app.locals.repositories;
+    let favorites;
+    if (noteRepo.isSupabase) {
+      const { data, error } = await noteRepo.db
+        .from('note_favorites')
+        .select('users(id, public_display_name)')
+        .eq('note_id', req.params.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      favorites = (data || []).map(item => item.users).filter(Boolean);
+    } else {
+      favorites = await noteRepo.db.all(`
+        SELECT u.id, u.public_display_name FROM note_favorites nf
+        JOIN users u ON nf.user_id = u.id
+        WHERE nf.note_id = ?
+        ORDER BY nf.created_at DESC
+      `, [req.params.id]);
+    }
 
     res.json({
       favorites,

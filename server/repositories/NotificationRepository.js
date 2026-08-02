@@ -9,6 +9,45 @@ export class NotificationRepository extends BaseRepository {
    * 創建回覆通知
    */
   async createReplyNotification(userId, replyId, actorUserId, noteId, deepLink) {
+    if (this.isSupabase) {
+      const { data: note, error: noteError } = await this.db
+        .from('notes')
+        .select('article_id, paragraph_anchor')
+        .eq('id', noteId)
+        .maybeSingle();
+      if (noteError) throw noteError;
+
+      const { data: actor, error: actorError } = await this.db
+        .from('users')
+        .select('public_display_name')
+        .eq('id', actorUserId)
+        .maybeSingle();
+      if (actorError) throw actorError;
+
+      const message = `${actor?.public_display_name || '匿名使用者'} 回覆了你的註解`;
+      const { data, error } = await this.db
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: 'reply',
+          actor_user_id: actorUserId,
+          target_type: 'reply',
+          target_id: replyId,
+          note_id: noteId,
+          reply_id: replyId,
+          article_id: note?.article_id,
+          paragraph_anchor: note?.paragraph_anchor,
+          deep_link: deepLink,
+          message
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+
+      await this.updateUnreadCount(userId);
+      return data.id;
+    }
+
     const note = await this.db.get(`
       SELECT article_id, paragraph_anchor FROM notes WHERE id = ?
     `, [noteId]);
@@ -48,6 +87,22 @@ export class NotificationRepository extends BaseRepository {
    * 創建系統通知
    */
   async createSystemNotification(userId, message, deepLink = null) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: 'system',
+          target_type: 'system',
+          message,
+          deep_link: deepLink
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return data.id;
+    }
+
     const query = `
       INSERT INTO notifications (
         user_id, type, target_type, message, deep_link
@@ -61,6 +116,17 @@ export class NotificationRepository extends BaseRepository {
    * 獲取用戶的未讀通知
    */
   async getUnreadNotifications(userId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_read', false)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    }
+
     const query = `
       SELECT * FROM notifications
       WHERE user_id = ? AND is_read = 0
@@ -74,6 +140,17 @@ export class NotificationRepository extends BaseRepository {
    * 獲取用戶的所有通知
    */
   async getUserNotifications(userId, limit = 50, offset = 0) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) throw error;
+      return data || [];
+    }
+
     const query = `
       SELECT * FROM notifications
       WHERE user_id = ?
@@ -88,6 +165,15 @@ export class NotificationRepository extends BaseRepository {
    * 標記通知為已讀
    */
   async markAsRead(notificationId) {
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('notifications')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('id', notificationId);
+      if (error) throw error;
+      return;
+    }
+
     const query = `
       UPDATE notifications
       SET is_read = 1, read_at = CURRENT_TIMESTAMP
@@ -101,6 +187,16 @@ export class NotificationRepository extends BaseRepository {
    * 標記所有通知為已讀
    */
   async markAllAsRead(userId) {
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('notifications')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+      if (error) throw error;
+      return;
+    }
+
     const query = `
       UPDATE notifications
       SET is_read = 1, read_at = CURRENT_TIMESTAMP
@@ -114,6 +210,15 @@ export class NotificationRepository extends BaseRepository {
    * 刪除通知
    */
   async deleteNotification(notificationId) {
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('notifications')
+        .delete()
+        .eq('id', notificationId);
+      if (error) throw error;
+      return;
+    }
+
     const query = `DELETE FROM notifications WHERE id = ?`;
     await this.db.run(query, [notificationId]);
   }
@@ -122,6 +227,24 @@ export class NotificationRepository extends BaseRepository {
    * 標記指向的目標為已刪除
    */
   async markTargetAsDeleted(targetType, targetId) {
+    if (this.isSupabase) {
+      let query = this.db
+        .from('notifications')
+        .update({ target_deleted: true });
+
+      if (targetType === 'note') {
+        query = query.eq('note_id', targetId);
+      } else if (targetType === 'reply') {
+        query = query.eq('reply_id', targetId);
+      } else {
+        return;
+      }
+
+      const { error } = await query;
+      if (error) throw error;
+      return;
+    }
+
     let query = '';
 
     if (targetType === 'note') {
@@ -147,6 +270,22 @@ export class NotificationRepository extends BaseRepository {
    * 更新用戶未讀通知計數
    */
   async updateUnreadCount(userId) {
+    if (this.isSupabase) {
+      const { count, error: countError } = await this.db
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+      if (countError) throw countError;
+
+      const { error } = await this.db
+        .from('user_stats')
+        .update({ unread_notifications_count: count || 0, updated_at: new Date().toISOString() })
+        .eq('user_id', userId);
+      if (error) throw error;
+      return;
+    }
+
     const count = await this.db.get(`
       SELECT COUNT(*) as total FROM notifications
       WHERE user_id = ? AND is_read = 0
@@ -165,6 +304,20 @@ export class NotificationRepository extends BaseRepository {
    * 獲取用戶的通知摘要
    */
   async getNotificationSummary(userId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('notifications')
+        .select('type, is_read')
+        .eq('user_id', userId);
+      if (error) throw error;
+
+      return {
+        total_notifications: data?.length || 0,
+        unread_count: (data || []).filter(item => !item.is_read).length,
+        reply_count: (data || []).filter(item => item.type === 'reply').length
+      };
+    }
+
     const query = `
       SELECT 
         COUNT(*) as total_notifications,
@@ -181,6 +334,16 @@ export class NotificationRepository extends BaseRepository {
    * 檢查用戶是否應該接收回覆通知
    */
   async shouldNotifyUser(userId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('user_settings')
+        .select('notify_on_reply')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.notify_on_reply === true;
+    }
+
     const settings = await this.db.get(`
       SELECT notify_on_reply FROM user_settings WHERE user_id = ?
     `, [userId]);
@@ -192,6 +355,10 @@ export class NotificationRepository extends BaseRepository {
    * 清除已刪除的通知
    */
   async cleanupDeletedTargetNotifications() {
+    if (this.isSupabase) {
+      return;
+    }
+
     // 找到指向已刪除註記或回覆的通知
     const query = `
       UPDATE notifications
@@ -213,6 +380,20 @@ export class NotificationRepository extends BaseRepository {
    * 獲取特定回覆的回覆計數（用於顯示統計）
    */
   async getReplyStats(userId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('notifications')
+        .select('is_read')
+        .eq('user_id', userId)
+        .eq('type', 'reply');
+      if (error) throw error;
+
+      return {
+        total_replies_received: data?.length || 0,
+        unread_replies: (data || []).filter(item => !item.is_read).length
+      };
+    }
+
     const query = `
       SELECT 
         COUNT(*) as total_replies_received,

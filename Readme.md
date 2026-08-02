@@ -6,8 +6,6 @@
 
 此網站後續擴充「個人占卜紀錄 + 公開協作註記」系統，讓使用者可安全保存自己的資料，並可選擇將註記公開給社群討論。
 
-
-
 部分資料來自：
 
 - https://github.com/john-walks-slow/open-iching
@@ -16,17 +14,37 @@
 如有錯漏，歡迎修正。
 
 ## Update
+
 > 後續內容擴充方向：- 帛書版易經 - 歸藏易經 版本的加入
 
-2026.07.26: 
-2026.07.25: Divination function added.
-2026.07.18: Website is built.
-2026.07.11: This repo is created.
+- 2026.08.02: Backend 2.0
+- 2026.07.26: Vote function + Backend 1.0
+- 2026.07.25: Divination function added.
+- 2026.07.18: Website is built.
+- 2026.07.11: This repo is created.
 
 ## 1. 項目結構
 
-```text
+~~~text
 .
+├─ api/
+│  └─ [...path].js                 Vercel catch-all API function
+├─ server/
+│  ├─ app.js                       共用 Express application
+│  ├─ index.js                     本機伺服器入口
+│  ├─ db/
+│  │  ├─ schema-supabase.sql
+│  │  └─ rls-policies-supabase.sql
+│  ├─ middleware/
+│  │  └─ auth.js
+│  ├─ repositories/
+│  ├─ routes/
+│  └─ services/
+├─ public/                         網頁前端資源
+├─ scripts/
+│  ├─ build-safe.js
+│  ├─ build.js
+│  └─ create-supabase-tables.js
 ├─ heluolishu/
 │  └─ hllx_card.json
 ├─ iching/
@@ -50,23 +68,19 @@
 │  ├─ 系辭.md
 │  ├─ 雜卦.md
 │  └─ 占卜流程.md
-├─ image/
-│  └─ *.jpg
-├─ public/
-│  ├─ index.html
-│  ├─ app.js
-│  └─ style.css
-├─ scripts/
-│  └─ build.js
+├─ image/                          圖片資源
 ├─ tests/
-├─ .gitignore
+├─ .env.development                本機環境變數範本
+├─ BACKEND_SETUP.md
+├─ DEVELOPMENT.md
+├─ SUPABASE_READY_REPORT.md
 ├─ package.json
-├─ process.ipynb
+├─ package-lock.json
+├─ process.ipynb                   資料整理 Notebook
 ├─ Readme.md
 └─ vercel.json
-```
+~~~
 
-其中 `dist/` 是執行 `npm run build` 後產生的靜態網站，不納入 Git；`.vercel/` 是 Vercel CLI 的本機專案連結設定，也不納入 Git。
 
 ## 2. 內容說明
 
@@ -222,102 +236,86 @@
 
 網站採純靜態架構。Vercel 部署時會執行 `scripts/build.js`，將 `public/`、`iching/iching.json`、`image/` 與 `md/` 整理至 `dist/`，不需要另外架設 Node.js HTTP 伺服器或資料庫後台。
 
-### 4.1 安裝 Node.js
+### 技術
 
-前往 [Node.js 官方網站](https://nodejs.org/)下載並安裝 LTS 版本。安裝完成後重新開啟終端機，確認版本：
+- Frontend：原生 HTML、CSS、JavaScript
+- Backend：Express
+- Database：Supabase PostgreSQL
+- Authentication：Supabase Auth + Google OAuth PKCE
+- Authorization：Supabase RLS + API owner checks
+- Deployment：Vercel Static Output + Serverless Function
 
-```bash
-node --version
-npm --version
-```
+### 快速啟動
 
-### 4.2 取得專案
+需要 Node.js 18+。
 
-使用 Git：
+    npm install
 
-```bash
-git clone https://github.com/apptcom1123/YZ_json.git
-cd YZ_json
-```
+在根目錄建立 .env：
 
-若已下載專案，直接進入專案目錄：
+    PORT=3001
+    NODE_ENV=development
+    SUPABASE_URL=https://your-project-ref.supabase.co
+    SUPABASE_KEY=sb_publishable_your_publishable_key
+    SUPABASE_SERVICE_KEY=your_service_role_key
 
-```bat
-cd C:\Users\n2000\Downloads\YZ_json
-```
+啟動：
 
-### 4.3 建置靜態網站
+    npm run build
+    npm run dev
 
-```bash
-npm run build
-```
+開啟 http://localhost:3001，以真實 Google 帳號登入。
 
-成功後會產生 `dist/`，其中包含可部署的首頁、JavaScript、CSS、六十四卦 JSON、Markdown 原文與圖片。
+### Supabase 與 Google 設定
 
-Windows PowerShell 若因執行原則無法執行 `npm.ps1`，可改用：
+完整設定請閱讀：
 
-```bat
-npm.cmd run build
-```
+- BACKEND_SETUP.md
+- DEVELOPMENT.md
+- SUPABASE_READY_REPORT.md
 
-### 4.4 在本機預覽
+重點：
 
-先完成 `npm run build`，再啟動靜態網站預覽：
+- 在 Supabase SQL Editor 執行 server/db/rls-policies-supabase.sql。
+- 在 Supabase Authentication -> Sign In / Providers -> Google 啟用 Google。
+- Google redirect URI 使用 Supabase callback：
 
-```bash
-npm run preview
-```
+      https://tppijacljktspgbiphml.supabase.co/auth/v1/callback
 
-第一次執行時，`npx` 會自動下載 `serve`。然後用瀏覽器開啟終端機顯示的本機網址，預設通常為：
+- Supabase Redirect URLs 至少包含：
 
-```text
-http://localhost:3000
-```
+      http://localhost:3001/
+      https://iching-reader-seven.vercel.app/
 
-Windows PowerShell 若因執行原則無法執行 `npm.ps1`，可改用：
+### 部署到 Vercel
 
-```bat
-npm.cmd run preview
-```
+Vercel 使用 npm run build 建立 dist，並以 api/[...path].js 處理 /api/*。
 
-按 `Ctrl + C` 可停止本機預覽。
+在 Vercel Project Settings 的 Environment Variables 設定：
 
-### 4.5 安裝 Vercel CLI 並部署
+    SUPABASE_URL
+    SUPABASE_KEY
+    SUPABASE_SERVICE_KEY
 
-```bash
-npm install --global vercel
-vercel login
-```
+SUPABASE_SERVICE_KEY 必須標記為 Sensitive，且只供 Vercel Function 使用。變數設定完成後重新部署，再確認：
 
-Windows PowerShell 若無法執行 `vercel.ps1`，請使用：
+    https://iching-reader-seven.vercel.app/api/health
 
-```bat
-vercel.cmd login
-```
+### 安全
 
-首次建立或連結 Vercel 專案並產生預覽部署：
+任何寫入與個人資料 API 都要求有效的 Supabase access token。service role key 不得暴露到前端。
 
-```bash
-vercel
-```
+### 指令
 
-確認預覽正常後部署至正式環境：
+| 指令 | 用途 |
+| --- | --- |
+| npm run dev | 啟動本機完整網站與 API |
+| npm run build | 建立部署輸出 |
+| npm run dev:with-build | build 後啟動本機伺服器 |
+| npm run preview | 預覽靜態輸出 |
 
-```bash
-vercel --prod
-```
-
-Windows PowerShell 可對應使用：
-
-```bat
-vercel.cmd
-vercel.cmd --prod
-```
-
-專案已透過 `vercel.json` 指定 `npm run build` 為建置指令、`dist` 為輸出目錄。部署完成後，Vercel 顯示的 `Aliased` 網址是適合公開分享的固定網址。
-
-螢光筆註解只保存在使用者瀏覽器的 `localStorage`，不會上傳至 Vercel 或任何資料庫。清除網站資料、切換瀏覽器、裝置或網域時，註解不會自動同步。
 
 ## 版權聲明
 
 數據採集自互聯網，僅供學習交流使用，不得用於商業用途。
+

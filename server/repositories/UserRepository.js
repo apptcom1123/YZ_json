@@ -1,318 +1,92 @@
 import { BaseRepository } from './BaseRepository.js';
-import crypto from 'crypto';
 
 export class UserRepository extends BaseRepository {
-  constructor(db) {
-    super(db, 'users');
+  constructor(db) { super(db, 'users'); }
+  async findByGoogleSub(googleSub) { return this.findOne({ google_sub: googleSub }); }
+  async findByEmail(email) { return this.findOne({ email }); }
+
+  async upsertFromSupabaseAuth(authUser) {
+    const identity = authUser.identities?.find(item => item.provider === 'google');
+    const metadata = authUser.user_metadata || {};
+    const now = new Date().toISOString();
+    const googleSub = identity?.identity_data?.sub || metadata.sub || authUser.id;
+    const displayName = metadata.full_name || metadata.name || authUser.email || '使用者';
+    const { error } = await this.db.from('users').upsert({
+      id: authUser.id, google_sub: googleSub, email: authUser.email,
+      display_name: displayName, public_display_name: displayName,
+      avatar_url: metadata.avatar_url || metadata.picture || null, last_login_at: now,
+      is_active: true, updated_at: now
+    }, { onConflict: 'id' });
+    if (error) throw error;
+    const { error: settingsError } = await this.db.from('user_settings').upsert({ user_id: authUser.id }, { onConflict: 'user_id', ignoreDuplicates: true });
+    if (settingsError) throw settingsError;
+    const { error: statsError } = await this.db.from('user_stats').upsert({ user_id: authUser.id }, { onConflict: 'user_id', ignoreDuplicates: true });
+    if (statsError) throw statsError;
+    return this.findById(authUser.id);
   }
 
-  /**
-   * 通過 Google Sub 查找用戶
-   */
-  async findByGoogleSub(googleSub) {
-    return this.findOne({ google_sub: googleSub });
-  }
-
-  /**
-   * 通過 Email 查找用戶
-   */
-  async findByEmail(email) {
-    return this.findOne({ email });
-  }
-
-  /**
-   * 創建或更新用戶（OAuth 登入流程用）
-   */
-  async upsertFromGoogleAuth(googleData) {
-    const { sub, email, name, picture, _disabled, _disabledReason } = googleData;
-    
-    let user = await this.findByGoogleSub(sub);
-
-    if (user) {
-      // 更新最後登入時間
-      await this.update(user.id, {
-        last_login_at: new Date().toISOString()
-      });
-      return this.findById(user.id);
-    }
-
-    // 生成匿名代碼用於公開顯示
-    const publicAlias = this.generatePublicAlias();
-
-    // 創建新用戶 - 讓 SQLite 自動生成 ID
-    const userId = await this.create({
-      google_sub: sub,
-      email: email,
-      display_name: name || email,
-      avatar_url: picture || null,
-      public_display_name: name || email,
-      last_login_at: new Date().toISOString(),
-      is_active: _disabled ? 0 : 1,
-      disabled_reason: _disabled ? (_disabledReason || '帳號已禁用') : null
-    });
-
-    // 為新用戶創建設定
-    if (this.isSupabase) {
-      await this.db.from('user_settings').insert({
-        user_id: userId,
-        terms_accepted: false
-      });
-    } else {
-      const db = this.db;
-      await db.run(`
-        INSERT INTO user_settings (user_id, terms_accepted)
-        VALUES (?, 0)
-      `, [userId]);
-    }
-
-    // 為新用戶創建統計
-    if (this.isSupabase) {
-      await this.db.from('user_stats').insert({
-        user_id: userId
-      });
-    } else {
-      const db = this.db;
-      await db.run(`
-        INSERT INTO user_stats (user_id)
-        VALUES (?)
-      `, [userId]);
-    }
-
-    return this.findById(userId);
-  }
-
-  /**
-   * 獲取用戶的完整信息（含設定）
-   */
   async getUserWithSettings(userId) {
     const user = await this.findById(userId);
     if (!user) return null;
-
-    // 從 user_settings 表獲取設置
-    if (this.isSupabase) {
-      const { data, error } = await this.db
-        .from('user_settings')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') throw error;
-      const settings = data || {};
-      return { ...user, ...settings };
-    } else {
-      const query = `
-        SELECT u.*, us.* 
-        FROM users u
-        LEFT JOIN user_settings us ON u.id = us.user_id
-        WHERE u.id = ? AND u.deleted_at IS NULL
-      `;
-      return this.db.get(query, [userId]) || null;
-    }
+    const { data, error } = await this.db.from('user_settings').select('*').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
+    return { ...user, ...(data || {}) };
   }
 
-  /**
-   * 更新用戶設定
-   */
   async updateUserSettings(userId, settings) {
-    const allowedKeys = [
-      'save_notes_to_cloud',
-      'save_divination_to_cloud',
-      'allow_public_notes',
-      'note_visibility_threshold_percent',
-      'language',
-      'timezone',
-      'notify_on_reply'
-    ];
-
-    const updates = {};
-    for (const [key, value] of Object.entries(settings)) {
-      if (allowedKeys.includes(key)) {
-        updates[key] = value;
-      }
+    const allowed = ['save_notes_to_cloud', 'save_divination_to_cloud', 'allow_public_notes', 'note_visibility_threshold_percent', 'language', 'timezone', 'notify_on_reply'];
+    const updates = Object.fromEntries(Object.entries(settings).filter(([key]) => allowed.includes(key)));
+    if (Object.keys(updates).length) {
+      const { error } = await this.db.from('user_settings').update({ ...updates, updated_at: new Date().toISOString() }).eq('user_id', userId);
+      if (error) throw error;
     }
-
-    if (Object.keys(updates).length === 0) {
-      return this.getUserWithSettings(userId);
-    }
-
-    const setClauses = Object.keys(updates)
-      .map(key => `${key} = ?`)
-      .join(', ');
-    const values = [...Object.values(updates), userId];
-
-    const query = `
-      UPDATE user_settings
-      SET ${setClauses}, updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = ?
-    `;
-
-    await this.db.run(query, values);
     return this.getUserWithSettings(userId);
   }
 
-  /**
-   * 檢查用戶是否已接受條款
-   */
   async hasAcceptedTerms(userId, version) {
-    return this.findOne({ 
-      user_id: userId, 
-      doc_type: 'terms', 
-      doc_version: version 
-    });
+    const { data, error } = await this.db.from('legal_consents').select('*').eq('user_id', userId).eq('doc_type', 'terms').eq('doc_version', version).maybeSingle();
+    if (error) throw error;
+    return data || null;
   }
 
-  /**
-   * 記錄條款接受
-   */
   async acceptTerms(userId, version, ipAddress = null, userAgent = null) {
-    if (this.isSupabase) {
-      await this.db
-        .from('legal_consents')
-        .delete()
-        .eq('user_id', userId)
-        .eq('doc_type', 'terms');
-
-      const { error: consentError } = await this.db
-        .from('legal_consents')
-        .insert({
-          user_id: userId,
-          doc_type: 'terms',
-          doc_version: version,
-          ip_address: ipAddress,
-          user_agent: userAgent
-        });
-      if (consentError) throw consentError;
-
-      const { error: settingsError } = await this.db
-        .from('user_settings')
-        .update({
-          terms_accepted: true,
-          accepted_terms_version: version,
-          terms_accepted_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', userId);
-      if (settingsError) throw settingsError;
-      return;
-    }
-
-    // SQLite 路徑
-    await this.db.run(`
-      DELETE FROM legal_consents WHERE user_id = ? AND doc_type = 'terms'
-    `, [userId]);
-
-    const query = `
-      INSERT INTO legal_consents (user_id, doc_type, doc_version, ip_address, user_agent)
-      VALUES (?, 'terms', ?, ?, ?)
-    `;
-
-    await this.db.run(query, [userId, version, ipAddress, userAgent]);
-
-    await this.db.run(`
-      UPDATE user_settings
-      SET terms_accepted = 1, accepted_terms_version = ?, terms_accepted_at = CURRENT_TIMESTAMP
-      WHERE user_id = ?
-    `, [version, userId]);
+    const { error: deleteError } = await this.db.from('legal_consents').delete().eq('user_id', userId).eq('doc_type', 'terms');
+    if (deleteError) throw deleteError;
+    const { error: consentError } = await this.db.from('legal_consents').insert({ user_id: userId, doc_type: 'terms', doc_version: version, ip_address: ipAddress, user_agent: userAgent });
+    if (consentError) throw consentError;
+    const { error: settingsError } = await this.db.from('user_settings').update({ terms_accepted: true, accepted_terms_version: version, terms_accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('user_id', userId);
+    if (settingsError) throw settingsError;
   }
 
-  /**
-   * 禁用用戶
-   */
   async disableUser(userId, reason) {
-    const query = `
-      UPDATE users
-      SET is_active = 0, disabled_reason = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `;
-    await this.db.run(query, [reason, userId]);
+    const { error } = await this.db.from('users').update({ is_active: false, disabled_reason: reason, updated_at: new Date().toISOString() }).eq('id', userId);
+    if (error) throw error;
   }
 
-  /**
-   * 軟刪除用戶（不可恢復）
-   */
   async softDelete(userId) {
-    const query = `
-      UPDATE users
-      SET deleted_at = CURRENT_TIMESTAMP, is_active = 0, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `;
-    await this.db.run(query, [userId]);
-
-    // 級聯刪除相關數據
-    await this.transaction(async (db) => {
-      // 刪除用戶的所有註記
-      await db.run(`UPDATE notes SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP WHERE author_id = ?`, [userId]);
-      
-      // 刪除用戶的所有回覆
-      await db.run(`UPDATE note_replies SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE author_id = ?`, [userId]);
-      
-      // 清除用戶的投票和收藏
-      await db.run(`DELETE FROM note_votes WHERE user_id = ?`, [userId]);
-      await db.run(`DELETE FROM note_favorites WHERE user_id = ?`, [userId]);
-      
-      // 刪除用戶的占卜記錄
-      await db.run(`DELETE FROM divination_records WHERE user_id = ?`, [userId]);
-    });
+    const deletedAt = new Date().toISOString();
+    const operations = [
+      this.db.from('users').update({ deleted_at: deletedAt, is_active: false, updated_at: deletedAt }).eq('id', userId),
+      this.db.from('notes').update({ status: 'deleted', deleted_at: deletedAt, updated_at: deletedAt }).eq('author_id', userId),
+      this.db.from('note_replies').update({ status: 'deleted', updated_at: deletedAt }).eq('author_id', userId),
+      this.db.from('note_votes').delete().eq('user_id', userId), this.db.from('note_favorites').delete().eq('user_id', userId),
+      this.db.from('divination_records').delete().eq('user_id', userId)
+    ];
+    for (const operation of operations) { const { error } = await operation; if (error) throw error; }
   }
 
-  /**
-   * 生成匿名代碼
-   */
-  generatePublicAlias() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let alias = '';
-    for (let i = 0; i < 4; i++) {
-      alias += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return alias;
-  }
-
-  /**
-   * 檢查用戶是否可以登入
-   */
   async canLogin(userId) {
     const user = await this.findById(userId);
     if (!user) return { allowed: false, reason: 'USER_NOT_FOUND' };
     if (!user.is_active) return { allowed: false, reason: 'ACCOUNT_DISABLED', disabledReason: user.disabled_reason };
-    if (user.deleted_at) return { allowed: false, reason: 'ACCOUNT_DELETED' };
-
-    let settings;
-    if (this.isSupabase) {
-      const { data, error } = await this.db
-        .from('user_settings')
-        .select('terms_accepted')
-        .eq('user_id', userId)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') throw error;
-      settings = data;
-    } else {
-      settings = this.db.get('SELECT terms_accepted FROM user_settings WHERE user_id = ?', [userId]);
-    }
-
-    if (!settings?.terms_accepted) {
-      return { allowed: false, reason: 'TERMS_NOT_ACCEPTED' };
-    }
-
-    return { allowed: true };
+    const { data, error } = await this.db.from('user_settings').select('terms_accepted').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
+    return data?.terms_accepted ? { allowed: true } : { allowed: false, reason: 'TERMS_NOT_ACCEPTED' };
   }
 
-  /**
-   * 獲取用戶統計
-   */
   async getUserStats(userId) {
-    if (this.isSupabase) {
-      const { data, error } = await this.db
-        .from('user_stats')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') throw error;
-      return data || null;
-    } else {
-      const query = `SELECT * FROM user_stats WHERE user_id = ?`;
-      return this.db.get(query, [userId]) || null;
-    }
+    const { data, error } = await this.db.from('user_stats').select('*').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
+    return data || null;
   }
 }

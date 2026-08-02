@@ -9,6 +9,23 @@ export class DivinationRepository extends BaseRepository {
    * 創建占卜記錄
    */
   async createDivination(userId, guaId, questionText, resultPayload, source = 'cloud', localUuid = null) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('divination_records')
+        .insert({
+          user_id: userId,
+          gua_id: guaId,
+          question_text: questionText,
+          result_payload: typeof resultPayload === 'string' ? resultPayload : JSON.stringify(resultPayload),
+          source,
+          local_uuid: localUuid
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return data.id;
+    }
+
     const query = `
       INSERT INTO divination_records (
         user_id, gua_id, question_text, result_payload, source, local_uuid
@@ -31,6 +48,26 @@ export class DivinationRepository extends BaseRepository {
    * 獲取用戶的所有占卜記錄（包含本地和雲端）
    */
   async getUserDivinations(userId, includeDeleted = false) {
+    if (this.isSupabase) {
+      let query = this.db
+        .from('divination_records')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (!includeDeleted) query = query.is('deleted_at', null);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      return (data || []).map(record => ({
+        ...record,
+        result_payload: typeof record.result_payload === 'string'
+          ? JSON.parse(record.result_payload)
+          : record.result_payload
+      }));
+    }
+
     let query = `
       SELECT * FROM divination_records
       WHERE user_id = ?
@@ -79,6 +116,21 @@ export class DivinationRepository extends BaseRepository {
       return this.findById(divinationId);
     }
 
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('divination_records')
+        .update(data)
+        .eq('id', divinationId)
+        .eq('user_id', userId);
+      if (error) throw error;
+
+      const result = await this.findById(divinationId);
+      if (result.result_payload && typeof result.result_payload === 'string') {
+        result.result_payload = JSON.parse(result.result_payload);
+      }
+      return result;
+    }
+
     const setClauses = Object.keys(data)
       .map(key => `${key} = ?`)
       .join(', ');
@@ -108,6 +160,16 @@ export class DivinationRepository extends BaseRepository {
       throw new Error('NOT_RECORD_OWNER');
     }
 
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('divination_records')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', divinationId)
+        .eq('user_id', userId);
+      if (error) throw error;
+      return;
+    }
+
     const query = `
       UPDATE divination_records
       SET deleted_at = CURRENT_TIMESTAMP
@@ -131,6 +193,46 @@ export class DivinationRepository extends BaseRepository {
     for (const localRecord of localRecords) {
       try {
         if (localRecord.local_uuid) {
+          if (this.isSupabase) {
+            const { data: existing, error } = await this.db
+              .from('divination_records')
+              .select('*')
+              .eq('user_id', userId)
+              .eq('local_uuid', localRecord.local_uuid)
+              .maybeSingle();
+            if (error) throw error;
+
+            if (existing) {
+              const localTime = new Date(localRecord.updated_at || localRecord.created_at).getTime();
+              const existingTime = new Date(existing.updated_at || existing.created_at).getTime();
+
+              if (localTime > existingTime) {
+                await this.updateDivination(existing.id, userId, {
+                  question_text: localRecord.question_text,
+                  result_payload: localRecord.result_payload
+                });
+                syncResults.synced.push(localRecord.local_uuid);
+              } else {
+                syncResults.conflicts.push({
+                  localUuid: localRecord.local_uuid,
+                  cloudId: existing.id,
+                  cloudVersion: existing.updated_at || existing.created_at
+                });
+              }
+            } else {
+              await this.createDivination(
+                userId,
+                localRecord.gua_id,
+                localRecord.question_text,
+                localRecord.result_payload,
+                'imported',
+                localRecord.local_uuid
+              );
+              syncResults.synced.push(localRecord.local_uuid);
+            }
+            continue;
+          }
+
           const existing = await this.db.get(`
             SELECT * FROM divination_records 
             WHERE user_id = ? AND local_uuid = ?
@@ -184,6 +286,20 @@ export class DivinationRepository extends BaseRepository {
    * 獲取特定卦的占卜統計
    */
   async getGuaDivinationStats(guaId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('divination_records')
+        .select('user_id')
+        .eq('gua_id', guaId)
+        .is('deleted_at', null);
+      if (error) throw error;
+
+      return {
+        total_count: data?.length || 0,
+        unique_users: new Set((data || []).map(row => row.user_id)).size
+      };
+    }
+
     const query = `
       SELECT COUNT(*) as total_count, COUNT(DISTINCT user_id) as unique_users
       FROM divination_records

@@ -31,6 +31,29 @@ export class NoteRepository extends BaseRepository {
       publicAlias = this.generatePublicAlias(authorId, articleId);
     }
 
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('notes')
+        .insert({
+          author_id: authorId,
+          article_type: articleType,
+          article_id: articleId,
+          paragraph_anchor: paragraphAnchor,
+          anchor_offset_start: anchorOffsetStart,
+          anchor_offset_end: anchorOffsetEnd,
+          cluster_key: clusterKey,
+          content,
+          visibility,
+          public_alias: publicAlias,
+          local_uuid: localUuid,
+          status: 'active'
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return data.id;
+    }
+
     const query = `
       INSERT INTO notes (
         author_id, article_type, article_id, paragraph_anchor,
@@ -52,6 +75,25 @@ export class NoteRepository extends BaseRepository {
    * 獲取文章特定段落的公開註記（帶聚合）
    */
   async getPublicNotesForParagraph(articleId, paragraphAnchor, thresholdPercent = 60) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('notes')
+        .select('*, users(public_display_name)')
+        .eq('article_id', articleId)
+        .eq('paragraph_anchor', paragraphAnchor)
+        .eq('visibility', 'public')
+        .eq('status', 'active')
+        .is('deleted_at', null)
+        .order('cluster_key', { ascending: true })
+        .order('score', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(note => ({
+        ...note,
+        public_display_name: note.users?.public_display_name
+      }));
+    }
+
     const query = `
       SELECT n.*, u.public_display_name
       FROM notes n
@@ -70,6 +112,23 @@ export class NoteRepository extends BaseRepository {
    * 獲取用戶的私人註記
    */
   async getUserPrivateNotes(userId, articleId = null) {
+    if (this.isSupabase) {
+      let query = this.db
+        .from('notes')
+        .select('*')
+        .eq('author_id', userId)
+        .eq('visibility', 'private')
+        .eq('status', 'active')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (articleId) query = query.eq('article_id', articleId);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    }
+
     let query = `
       SELECT n.*
       FROM notes n
@@ -139,6 +198,20 @@ export class NoteRepository extends BaseRepository {
       publicAlias = this.generatePublicAlias(userId, note.article_id);
     }
 
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('notes')
+        .update({
+          visibility: newVisibility,
+          public_alias: publicAlias,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', noteId)
+        .eq('author_id', userId);
+      if (error) throw error;
+      return this.findById(noteId);
+    }
+
     const query = `
       UPDATE notes
       SET visibility = ?, public_alias = ?, updated_at = CURRENT_TIMESTAMP
@@ -158,6 +231,20 @@ export class NoteRepository extends BaseRepository {
       throw new Error('NOT_NOTE_OWNER');
     }
 
+    if (this.isSupabase) {
+      const { error } = await this.db
+        .from('notes')
+        .update({
+          status: 'deleted',
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', noteId)
+        .eq('author_id', userId);
+      if (error) throw error;
+      return;
+    }
+
     const query = `
       UPDATE notes
       SET status = 'deleted', deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
@@ -171,6 +258,42 @@ export class NoteRepository extends BaseRepository {
    * 投票（上 / 下 / 取消）
    */
   async vote(noteId, userId, voteType) {
+    if (this.isSupabase) {
+      const { data: existing, error: findError } = await this.db
+        .from('note_votes')
+        .select('*')
+        .eq('note_id', noteId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (findError) throw findError;
+
+      if (voteType === 'none' || existing?.vote_type === voteType) {
+        if (existing) {
+          const { error } = await this.db
+            .from('note_votes')
+            .delete()
+            .eq('note_id', noteId)
+            .eq('user_id', userId);
+          if (error) throw error;
+        }
+      } else if (existing) {
+        const { error } = await this.db
+          .from('note_votes')
+          .update({ vote_type: voteType, updated_at: new Date().toISOString() })
+          .eq('note_id', noteId)
+          .eq('user_id', userId);
+        if (error) throw error;
+      } else {
+        const { error } = await this.db
+          .from('note_votes')
+          .insert({ note_id: noteId, user_id: userId, vote_type: voteType });
+        if (error) throw error;
+      }
+
+      await this.updateNoteScore(noteId);
+      return;
+    }
+
     // 檢查是否已投票
     const existing = await this.db.get(`
       SELECT * FROM note_votes WHERE note_id = ? AND user_id = ?
@@ -214,6 +337,33 @@ export class NoteRepository extends BaseRepository {
    * 收藏/取消收藏
    */
   async toggleFavorite(noteId, userId) {
+    if (this.isSupabase) {
+      const { data: existing, error: findError } = await this.db
+        .from('note_favorites')
+        .select('*')
+        .eq('note_id', noteId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (findError) throw findError;
+
+      if (existing) {
+        const { error } = await this.db
+          .from('note_favorites')
+          .delete()
+          .eq('note_id', noteId)
+          .eq('user_id', userId);
+        if (error) throw error;
+      } else {
+        const { error } = await this.db
+          .from('note_favorites')
+          .insert({ note_id: noteId, user_id: userId });
+        if (error) throw error;
+      }
+
+      await this.updateNoteFavoriteCount(noteId);
+      return;
+    }
+
     const existing = await this.db.get(`
       SELECT * FROM note_favorites WHERE note_id = ? AND user_id = ?
     `, [noteId, userId]);
@@ -237,6 +387,23 @@ export class NoteRepository extends BaseRepository {
    * 重新計算註記分數
    */
   async updateNoteScore(noteId) {
+    if (this.isSupabase) {
+      const { data: votes, error: voteError } = await this.db
+        .from('note_votes')
+        .select('vote_type')
+        .eq('note_id', noteId);
+      if (voteError) throw voteError;
+
+      const upvotes = (votes || []).filter(v => v.vote_type === 'up').length;
+      const downvotes = (votes || []).filter(v => v.vote_type === 'down').length;
+      const { error } = await this.db
+        .from('notes')
+        .update({ upvote_count: upvotes, downvote_count: downvotes, score: upvotes - downvotes })
+        .eq('id', noteId);
+      if (error) throw error;
+      return;
+    }
+
     const stats = await this.db.get(`
       SELECT 
         COUNT(CASE WHEN vote_type = 'up' THEN 1 END) as upvotes,
@@ -260,6 +427,21 @@ export class NoteRepository extends BaseRepository {
    * 更新收藏計數
    */
   async updateNoteFavoriteCount(noteId) {
+    if (this.isSupabase) {
+      const { count, error: countError } = await this.db
+        .from('note_favorites')
+        .select('*', { count: 'exact', head: true })
+        .eq('note_id', noteId);
+      if (countError) throw countError;
+
+      const { error } = await this.db
+        .from('notes')
+        .update({ favorite_count: count || 0 })
+        .eq('id', noteId);
+      if (error) throw error;
+      return;
+    }
+
     const count = await this.db.get(`
       SELECT COUNT(*) as total FROM note_favorites WHERE note_id = ?
     `, [noteId]);
@@ -275,6 +457,17 @@ export class NoteRepository extends BaseRepository {
    * 取得用戶對特定註記的投票
    */
   async getUserVote(noteId, userId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('note_votes')
+        .select('vote_type')
+        .eq('note_id', noteId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
+    }
+
     const query = `
       SELECT vote_type FROM note_votes WHERE note_id = ? AND user_id = ?
     `;
@@ -285,6 +478,17 @@ export class NoteRepository extends BaseRepository {
    * 檢查用戶是否收藏了該註記
    */
   async isFavoritedBy(noteId, userId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('note_favorites')
+        .select('note_id')
+        .eq('note_id', noteId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data != null;
+    }
+
     const query = `
       SELECT 1 FROM note_favorites WHERE note_id = ? AND user_id = ?
     `;
@@ -308,6 +512,16 @@ export class NoteRepository extends BaseRepository {
    * 獲取用戶收藏的所有註記
    */
   async getUserFavorites(userId) {
+    if (this.isSupabase) {
+      const { data, error } = await this.db
+        .from('note_favorites')
+        .select('notes(*)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(item => item.notes).filter(Boolean);
+    }
+
     const query = `
       SELECT n.*
       FROM notes n

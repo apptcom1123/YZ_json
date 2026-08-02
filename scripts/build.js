@@ -30,6 +30,11 @@ fs.copyFileSync(
 
 fs.cpSync(path.join(root, 'image'), path.join(dist, 'image'), { recursive: true });
 fs.cpSync(path.join(root, 'md'), path.join(dist, 'texts'), { recursive: true });
+fs.mkdirSync(path.join(dist, 'vendor', 'supabase'), { recursive: true });
+fs.copyFileSync(
+  path.join(root, 'node_modules', '@supabase', 'supabase-js', 'dist', 'umd', 'supabase.js'),
+  path.join(dist, 'vendor', 'supabase', 'supabase.js'),
+);
 
 const imageCount = fs.readdirSync(path.join(dist, 'image'), { withFileTypes: true })
   .filter((entry) => entry.isFile()).length;

@@ -113,50 +113,6 @@ class APIClient {
   // ========== 認證 API ==========
 
   /**
-   * 獲取可用的測試帳號
-   */
-  getTestAccounts() {
-    return this.get('/auth/mock-accounts');
-  }
-
-  /**
-   * 啟動 OAuth 流程
-   */
-  startOAuth(returnTo = '/') {
-    return this.post('/auth/google/start', { returnTo });
-  }
-
-  /**
-   * 獲取 Mock 帳號列表
-   */
-  getMockAccounts() {
-    return this.get('/auth/mock-accounts');
-  }
-
-  /**
-   * 處理 OAuth callback
-   */
-  completeOAuth(state, nonce, selectedAccount) {
-    return this.post('/auth/google/callback', {
-      state,
-      nonce,
-      selectedAccount
-    });
-  }
-
-  /**
-   * 接受條款並完成登入
-   */
-  acceptTermsThenLogin(state, nonce, selectedAccount, docVersion = '1.0') {
-    return this.post('/auth/accept-terms-then-login', {
-      state,
-      nonce,
-      selectedAccount,
-      docVersion
-    });
-  }
-
-  /**
    * 登出
    */
   logout() {

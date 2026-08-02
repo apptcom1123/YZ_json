@@ -151,20 +151,31 @@ router.post('/terms/accept', requireAuth, async (req, res) => {
 router.get('/terms/status', requireAuth, async (req, res) => {
   try {
     const { user: userRepo } = req.app.locals.repositories;
-    const settings = await userRepo.db.get(`
-      SELECT terms_accepted, accepted_terms_version, terms_accepted_at 
-      FROM user_settings 
-      WHERE user_id = ?
-    `, [req.user.userId]);
+    let settings;
+    if (userRepo.isSupabase) {
+      const { data, error } = await userRepo.db
+        .from('user_settings')
+        .select('terms_accepted, accepted_terms_version, terms_accepted_at')
+        .eq('user_id', req.user.userId)
+        .maybeSingle();
+      if (error) throw error;
+      settings = data;
+    } else {
+      settings = await userRepo.db.get(`
+        SELECT terms_accepted, accepted_terms_version, terms_accepted_at 
+        FROM user_settings 
+        WHERE user_id = ?
+      `, [req.user.userId]);
+    }
 
     const latestTermsVersion = '2026-07-26'; // 應從配置中讀取
 
     res.json({
-      termsAccepted: settings?.terms_accepted === 1,
+      termsAccepted: settings?.terms_accepted === true || settings?.terms_accepted === 1,
       acceptedVersion: settings?.accepted_terms_version,
       acceptedAt: settings?.terms_accepted_at,
       latestVersion: latestTermsVersion,
-      needsAcceptance: !settings?.terms_accepted || settings?.accepted_terms_version !== latestTermsVersion
+      needsAcceptance: !(settings?.terms_accepted === true || settings?.terms_accepted === 1) || settings?.accepted_terms_version !== latestTermsVersion
     });
   } catch (error) {
     console.error('Get terms status error:', error);
@@ -228,18 +239,39 @@ router.post('/data/delete', requireAuth, async (req, res) => {
     }
 
     // 創建刪除審計日誌
-    await userRepo.db.run(`
-      INSERT INTO deletion_audit_logs (user_id, action_type, status)
-      VALUES (?, 'delete_data', 'success')
-    `, [req.user.userId]);
+    if (userRepo.isSupabase) {
+      const { error } = await userRepo.db
+        .from('deletion_audit_logs')
+        .insert({ user_id: req.user.userId, action_type: 'delete_data', status: 'success' });
+      if (error) throw error;
+    } else {
+      await userRepo.db.run(`
+        INSERT INTO deletion_audit_logs (user_id, action_type, status)
+        VALUES (?, 'delete_data', 'success')
+      `, [req.user.userId]);
+    }
 
     // 刪除用戶的雲端數據 - 使用軟刪除
     const userId = req.user.userId;
     const deletedAt = new Date().toISOString();
+    if (userRepo.isSupabase) {
+      const operations = [
+        userRepo.db.from('divination_records').update({ deleted_at: deletedAt }).eq('user_id', userId).is('deleted_at', null),
+        userRepo.db.from('notes').update({ deleted_at: deletedAt, status: 'deleted' }).eq('author_id', userId).is('deleted_at', null),
+        userRepo.db.from('note_favorites').delete().eq('user_id', userId),
+        userRepo.db.from('note_votes').delete().eq('user_id', userId),
+        userRepo.db.from('note_replies').update({ status: 'deleted', updated_at: deletedAt }).eq('author_id', userId)
+      ];
+
+      for (const operation of operations) {
+        const { error } = await operation;
+        if (error) throw error;
+      }
+    } else {
     
     // 軟刪除用戶的占卜記錄
     await userRepo.db.run(`
-      UPDATE divinations 
+      UPDATE divination_records 
       SET deleted_at = ? 
       WHERE user_id = ? AND deleted_at IS NULL
     `, [deletedAt, userId]);
@@ -279,6 +311,8 @@ router.post('/data/delete', requireAuth, async (req, res) => {
       WHERE user_id = ? AND deleted_at IS NULL
     `, [deletedAt, userId]);
 
+    }
+
     res.json({
       success: true,
       message: '已開始刪除數據'
@@ -312,10 +346,17 @@ router.post('/account/delete', requireAuth, async (req, res) => {
     }
 
     // 創建刪除審計日誌
-    await userRepo.db.run(`
-      INSERT INTO deletion_audit_logs (user_id, action_type, status)
-      VALUES (?, 'delete_account', 'success')
-    `, [req.user.userId]);
+    if (userRepo.isSupabase) {
+      const { error } = await userRepo.db
+        .from('deletion_audit_logs')
+        .insert({ user_id: req.user.userId, action_type: 'delete_account', status: 'success' });
+      if (error) throw error;
+    } else {
+      await userRepo.db.run(`
+        INSERT INTO deletion_audit_logs (user_id, action_type, status)
+        VALUES (?, 'delete_account', 'success')
+      `, [req.user.userId]);
+    }
 
     // 軟刪除用戶
     await userRepo.softDelete(req.user.userId);

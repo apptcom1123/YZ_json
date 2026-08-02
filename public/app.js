@@ -80,10 +80,7 @@ function bindUI(){
     $('#login-button').onclick=async ()=>{
       if(typeof authManager !== 'undefined'){
         try{
-          // 啟動 OAuth 流程
-          const result=await authManager.startLogin('/');
-          // 顯示帳號選擇界面
-          showLoginModal();
+          await authManager.startLogin('/');
         }catch(err){
           console.error('登入啟動失敗:', err);
           alert('登入失敗，請重試');
@@ -1354,9 +1351,6 @@ async function handleGoogleOAuthCallback() {
 }
 
 // 頁面加載時檢查 Google OAuth 回調
-if (window.location.search.includes('code=')) {
-  handleGoogleOAuthCallback();
-}
 
 // ===== 服務條款接受流程 =====
 async function showTermsModal(accountId, state, nonce){
