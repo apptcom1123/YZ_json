@@ -273,6 +273,16 @@ router.get('/favorites', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/stats', requireAuth, async (req, res) => {
+  try {
+    const stats = await req.app.locals.repositories.user.getEngagementStats(req.user.userId);
+    res.json(stats);
+  } catch (error) {
+    console.error('Get user engagement stats error:', error);
+    res.status(500).json({ error: 'FETCH_STATS_FAILED', message: '無法取得統計資料' });
+  }
+});
+
 /**
  * POST /api/me/data/delete
  * 刪除雲端數據

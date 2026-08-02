@@ -13,7 +13,7 @@ function toLocalCloudNote(note) {
   };
 }
 
-async function syncCloudNotes() {
+async function performCloudNotesSync() {
   if (!authManager.isLoggedIn) return;
   const settingsResponse = await api.getUserSettings();
   const savePrivateNotes = Boolean(settingsResponse.settings?.saveNotesToCloud);
@@ -43,6 +43,15 @@ async function syncCloudNotes() {
   saveNotes();
   applyHighlights();
   if (!document.getElementById('notes-panel').hidden) renderNotes();
+}
+
+let cloudNotesSyncPromise = null;
+function syncCloudNotes() {
+  if (cloudNotesSyncPromise) return cloudNotesSyncPromise;
+  cloudNotesSyncPromise = performCloudNotesSync().finally(() => {
+    cloudNotesSyncPromise = null;
+  });
+  return cloudNotesSyncPromise;
 }
 
 function toLocalCloudDivination(record) {
@@ -75,10 +84,24 @@ async function syncCloudDivinations() {
   if (!document.getElementById('notes-panel').hidden) renderDivinations();
 }
 
-authManager.onAuthChange(({ isLoggedIn }) => {
-  if (!isLoggedIn) return;
-  const userId = authManager.getCurrentUser()?.id;
-  if (!userId || typeof realtimeClient === 'undefined') return;
-  realtimeClient.subscribeToNotifications(userId, () => loadNotificationsList());
+let realtimeAccountUserId = null;
+
+function syncAccountRealtimeSubscriptions() {
+  const userId = authManager.isLoggedIn ? authManager.getCurrentUser()?.id : null;
+  if (realtimeAccountUserId && realtimeAccountUserId !== userId && typeof realtimeClient !== 'undefined') {
+    realtimeClient.unsubscribe(`notifications:${realtimeAccountUserId}`).catch(() => {});
+    realtimeClient.unsubscribe(`divinations:${realtimeAccountUserId}`).catch(() => {});
+    realtimeAccountUserId = null;
+  }
+  if (!userId || typeof realtimeClient === 'undefined' || !realtimeClient.isEnabled) return;
+  realtimeAccountUserId = userId;
+  realtimeClient.subscribeToNotifications(userId, update => {
+    if (typeof handleNotificationRealtimeUpdate === 'function') handleNotificationRealtimeUpdate(update);
+    else loadNotificationsList();
+  });
   realtimeClient.subscribeToDivinations(userId, () => syncCloudDivinations());
-});
+}
+
+authManager.onAuthChange(syncAccountRealtimeSubscriptions);
+window.addEventListener('supabase-realtime-ready', syncAccountRealtimeSubscriptions);
+syncAccountRealtimeSubscriptions();

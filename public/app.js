@@ -17,6 +17,26 @@ const DEFAULT_USER_SETTINGS={
   noteVisibilityThresholdPercent:50,
   notifyOnReply:true
 };
+let currentNoteThresholdPercent=50;
+const publicNotesInFlight=new Map();
+const publicNotesRefreshTimers=new Map();
+const publicNotesRefreshPending=new Set();
+const publicNoteRealtimeQueue=new Map();
+let publicNoteRenderFrame=null;
+let activePublicNotesArticleId=null;
+let activePublicNotesSubscriptionId=null;
+let statsRequestVersion=0;
+const threadRealtimeSubscriptionIds=new Set();
+let threadRefreshTimer=null;
+let notificationCache=[];
+let notificationStatsTimer=null;
+const notificationRealtimeQueue=new Map();
+let notificationRenderFrame=null;
+const threadReplyRealtimeQueue=new Map();
+let threadReplyRenderFrame=null;
+const threadNoteRealtimeQueue=new Map();
+let threadNoteRenderFrame=null;
+let realtimeReconcileTimer=null;
 
 function applySettingsToControls(settings=DEFAULT_USER_SETTINGS){
   if($('#settings-save-notes'))$('#settings-save-notes').checked=Boolean(settings.saveNotesToCloud);
@@ -25,6 +45,7 @@ function applySettingsToControls(settings=DEFAULT_USER_SETTINGS){
   if($('#settings-notify-replies'))$('#settings-notify-replies').checked=settings.notifyOnReply!==false;
   const threshold=$('#settings-threshold');
   const thresholdValue=Number(settings.noteVisibilityThresholdPercent ?? 50);
+  currentNoteThresholdPercent=thresholdValue;
   if(threshold){
     threshold.value=thresholdValue;
     threshold.dataset.savedValue=String(thresholdValue);
@@ -128,7 +149,18 @@ function bindUI(){
     cancelPendingSelection();
   });
   $('#close-annotation').onclick=closeAnnotationModal; $('#cancel-annotation').onclick=closeAnnotationModal;
-  $('#annotation-form').onsubmit=submitAnnotation;
+  $('#annotation-form').onsubmit=event=>{
+    const form=event.currentTarget;
+    event.preventDefault();
+    if(form.dataset.submitting==='true')return;
+    form.dataset.submitting='true';
+    const submitButton=form.querySelector('[type="submit"]');
+    if(submitButton)submitButton.disabled=true;
+    Promise.resolve(submitAnnotation(event)).finally(()=>{
+      delete form.dataset.submitting;
+      if(submitButton)submitButton.disabled=false;
+    });
+  };
   bindDangerZoneButtons();
   
   // 占卜功能綁定
@@ -459,7 +491,7 @@ function applyHighlights(){
   }
 }
 
-async function loadPublicNotesForPage(articleId){
+async function loadPublicNotesForPageLegacy(articleId){
   try{
     // 即使目前沒有公開註記，也要先訂閱，才能收到其他人新增的第一筆資料。
     if(typeof realtimeClient !== 'undefined'&&realtimeClient.isEnabled){
@@ -518,7 +550,7 @@ async function loadPublicNotesForPage(articleId){
 }
 
 // 當閾值設定改變時重新加載註記
-function handleThresholdChange(){
+function handleThresholdChangeLegacy(){
   const root=$('.annotatable');
   if(root){
     const articleId=root.dataset.doc;
@@ -528,7 +560,167 @@ function handleThresholdChange(){
   }
 }
 
-window.addEventListener('supabase-realtime-ready',()=>handleThresholdChange());
+window.addEventListener('supabase-realtime-ready',()=>{
+  const articleId=$('.annotatable')?.dataset.doc;
+  if(articleId){ensurePublicNotesSubscription(articleId);schedulePublicNotesRefresh(articleId,0);}
+});
+window.addEventListener('supabase-realtime-reconcile',()=>{
+  clearTimeout(realtimeReconcileTimer);
+  realtimeReconcileTimer=setTimeout(async()=>{
+    const articleId=$('.annotatable')?.dataset.doc;
+    if(articleId)schedulePublicNotesRefresh(articleId,0);
+    if(authManager?.isLoggedIn){
+      loadNotificationsList();
+      loadUserStats();
+    }
+    const thread=window.threadData;
+    const note=thread?.cluster?.[thread.currentIndex]?.note;
+    if(note){
+      try{
+        const [noteResponse,repliesResponse]=await Promise.all([api.getNote(note.id),api.getNoteReplies(note.id)]);
+        Object.assign(note,noteResponse?.note||noteResponse);
+        note.replies=dedupeById(repliesResponse?.replies||[]);
+        if(window.threadData)renderThreadContent(note);
+      }catch(error){
+        console.warn('Realtime reconciliation failed:',error);
+      }
+    }
+  },100);
+});
+
+function dedupeById(items){
+  return [...new Map((items||[]).filter(item=>item?.id).map(item=>[item.id,item])).values()];
+}
+
+function applyPublicNoteThreshold(notes,thresholdPercent=currentNoteThresholdPercent){
+  const percent=Math.min(100,Math.max(0,Number(thresholdPercent)||0));
+  const clusters=new Map();
+  (notes||[]).forEach(note=>{
+    const key=`${note.paragraph_anchor}:${note.cluster_key}`;
+    if(!clusters.has(key))clusters.set(key,[]);
+    clusters.get(key).push(note);
+  });
+  const visible=[];
+  clusters.forEach(cluster=>{
+    cluster.sort((a,b)=>(b.score||0)-(a.score||0)||(b.upvote_count||0)-(a.upvote_count||0)||new Date(b.created_at)-new Date(a.created_at));
+    visible.push(...cluster.slice(0,Math.ceil(cluster.length*percent/100)));
+  });
+  return visible;
+}
+
+function renderCachedPublicNotes(articleId){
+  const root=$('.annotatable');
+  if(!root||root.dataset.doc!==articleId)return;
+  const notes=applyPublicNoteThreshold(window.publicNotesByArticle?.[articleId]||[]);
+  const publicEntries=notes.map(note=>({
+    note:{...note,visibility:'public',doc:articleId,start:note.anchor_offset_start,end:note.anchor_offset_end,comment:note.content},
+    range:rangeFromOffsets(root,note.anchor_offset_start,note.anchor_offset_end),
+    type:'public',
+    clusterId:Number.isFinite(Number(note.cluster_key))?Number(note.cluster_key):Math.floor(note.anchor_offset_start/5)
+  })).filter(entry=>entry.range);
+  if(CSS.highlights&&window.Highlight){
+    CSS.highlights.delete('public-notes');
+    if(publicEntries.length)CSS.highlights.set('public-notes',new Highlight(...publicEntries.map(entry=>entry.range)));
+  }
+  const privateEntries=localNotesForDocument(articleId)
+    .filter(note=>note.visibility!=='public'||!note.serverId)
+    .map(note=>({note,range:rangeFromOffsets(root,note.start,note.end),type:'private',clusterId:Math.floor(note.start/5)}))
+    .filter(entry=>entry.range);
+  renderBubbles([...privateEntries,...publicEntries]);
+}
+
+function schedulePublicNotesRefresh(articleId,delay=100){
+  clearTimeout(publicNotesRefreshTimers.get(articleId));
+  publicNotesRefreshTimers.set(articleId,setTimeout(()=>{
+    publicNotesRefreshTimers.delete(articleId);
+    loadPublicNotesForPage(articleId);
+  },delay));
+}
+
+function applyPublicNoteRealtimeUpdate(articleId,update,render=true){
+  if(!window.publicNotesByArticle?.[articleId]){
+    schedulePublicNotesRefresh(articleId,0);
+    return;
+  }
+  const notes=window.publicNotesByArticle[articleId];
+  const changed=update.data;
+  if(!changed?.id)return;
+  const index=notes.findIndex(note=>note.id===changed.id);
+  const previousCommit=index>=0?notes[index]._realtimeCommitTimestamp:null;
+  if(previousCommit&&update.commitTimestamp&&previousCommit>update.commitTimestamp)return;
+  const remainsPublic=update.event!=='DELETE'
+    && changed.article_id===articleId
+    && changed.visibility==='public'
+    && changed.status==='active'
+    && !changed.deleted_at;
+  if(remainsPublic){
+    const nextNote={...changed,_realtimeCommitTimestamp:update.commitTimestamp||previousCommit||null};
+    if(index>=0)notes[index]={...notes[index],...nextNote};
+    else notes.push(nextNote);
+  }else if(index>=0){
+    notes.splice(index,1);
+  }
+  if(render)renderCachedPublicNotes(articleId);
+}
+
+function queuePublicNoteRealtimeUpdate(articleId,update){
+  if(!publicNoteRealtimeQueue.has(articleId))publicNoteRealtimeQueue.set(articleId,new Map());
+  const articleQueue=publicNoteRealtimeQueue.get(articleId);
+  const queued=articleQueue.get(update.data?.id);
+  if(!queued||!queued.commitTimestamp||!update.commitTimestamp||queued.commitTimestamp<=update.commitTimestamp){
+    articleQueue.set(update.data?.id,update);
+  }
+  if(publicNoteRenderFrame)return;
+  publicNoteRenderFrame=requestAnimationFrame(()=>{
+    publicNoteRenderFrame=null;
+    publicNoteRealtimeQueue.forEach((updates,queuedArticleId)=>{
+      updates.forEach(item=>applyPublicNoteRealtimeUpdate(queuedArticleId,item,false));
+      renderCachedPublicNotes(queuedArticleId);
+    });
+    publicNoteRealtimeQueue.clear();
+  });
+}
+
+function ensurePublicNotesSubscription(articleId){
+  if(typeof realtimeClient==='undefined'||!realtimeClient.isEnabled)return;
+  if(activePublicNotesArticleId===articleId)return;
+  if(activePublicNotesSubscriptionId)realtimeClient.unsubscribe(activePublicNotesSubscriptionId).catch(()=>{});
+  activePublicNotesArticleId=articleId;
+  activePublicNotesSubscriptionId=realtimeClient.subscribeToNotes(articleId,update=>{
+    if(['INSERT','UPDATE','DELETE'].includes(update.event))queuePublicNoteRealtimeUpdate(articleId,update);
+  });
+}
+
+async function loadPublicNotesForPage(articleId){
+  if(!articleId)return;
+  ensurePublicNotesSubscription(articleId);
+  if(publicNotesInFlight.has(articleId)){
+    publicNotesRefreshPending.add(articleId);
+    return publicNotesInFlight.get(articleId);
+  }
+  const request=(async()=>{
+    try{
+      const response=await fetch(`/api/notes?articleId=${encodeURIComponent(articleId)}&thresholdPercent=100`);
+      if(!response.ok)return;
+      const data=await response.json();
+      if(!window.publicNotesByArticle)window.publicNotesByArticle={};
+      window.publicNotesByArticle[articleId]=dedupeById(Array.isArray(data.notes)?data.notes:[]);
+      renderCachedPublicNotes(articleId);
+    }catch(err){
+      console.warn('Public annotation refresh failed:',err);
+    }finally{
+      publicNotesInFlight.delete(articleId);
+      if(publicNotesRefreshPending.delete(articleId))schedulePublicNotesRefresh(articleId,60);
+    }
+  })();
+  publicNotesInFlight.set(articleId,request);
+  return request;
+}
+
+function handleThresholdChange(){
+  const articleId=$('.annotatable')?.dataset.doc;
+  if(articleId)renderCachedPublicNotes(articleId);
+}
 
 function renderBubbles(entries){
   // 清除現有的所有氣泡
@@ -548,6 +740,15 @@ function renderBubbles(entries){
     ...cluster[0],
     note:{...cluster[0].note,clusterCount:cluster.length}
   }));
+  const bubbleOrder=new Map();
+  entries
+    .map(entry=>({
+      key:`${entry.type}:${entry.clusterId ?? Math.floor(Number(entry.note.start||0)/5)}`,
+      start:Number(entry.note.start ?? entry.note.anchor_offset_start ?? 0),
+      type:entry.type
+    }))
+    .sort((a,b)=>a.start-b.start||a.type.localeCompare(b.type))
+    .forEach(item=>{if(!bubbleOrder.has(item.key))bubbleOrder.set(item.key,bubbleOrder.size+1);});
   
   // 渲染私人氣泡（不聚合，直接顯示）
   privateEntries.forEach(({note,range},idx)=>{
@@ -557,7 +758,7 @@ function renderBubbles(entries){
     const bubble=document.createElement('button');
     bubble.className='annotation-bubble annotation-bubble-private';
     bubble.type='button';
-    bubble.textContent=note.clusterCount||idx+1;
+    bubble.textContent=bubbleOrder.get(`private:${Math.floor(Number(note.start||0)/5)}`)||idx+1;
     bubble.dataset.note=note.id;
     bubble.dataset.type='private';
     bubble.style.left=`${Math.min(innerWidth-32,rect.right+scrollX)}px`;
@@ -591,7 +792,7 @@ function renderBubbles(entries){
       bubble.type='button';
       
       // 氣泡顯示註記數量或"聚合"標誌
-      bubble.textContent=cluster.length>=2?'A':cluster[0].note.id.charAt(0).toUpperCase();
+      bubble.textContent=bubbleOrder.get(`public:${clusterId}`)||1;
       bubble.dataset.cluster=clusterId;
       bubble.dataset.type='public-cluster';
       bubble.dataset.notesCount=cluster.length;
@@ -643,6 +844,67 @@ function orderedReplies(replies, sortBy='best'){
   return [...replies].sort((a,b)=>sortBy==='latest'
     ? new Date(b.created_at)-new Date(a.created_at)
     : (b.upvote_count||0)-(a.upvote_count||0)||new Date(b.created_at)-new Date(a.created_at));
+}
+
+function flattenReplies(replies,depth=0){
+  const flattened=[];
+  (replies||[]).forEach(reply=>{
+    flattened.push({...reply,_depth:depth});
+    flattened.push(...flattenReplies(reply.children||[],depth+1));
+  });
+  return flattened;
+}
+
+function queueThreadReplyRealtimeUpdate(note,update){
+  if(!update?.data?.id)return;
+  const queued=threadReplyRealtimeQueue.get(update.data.id);
+  if(!queued||!queued.update.commitTimestamp||!update.commitTimestamp||queued.update.commitTimestamp<=update.commitTimestamp){
+    threadReplyRealtimeQueue.set(update.data.id,{note,update});
+  }
+  if(threadReplyRenderFrame)return;
+  threadReplyRenderFrame=requestAnimationFrame(()=>{
+    threadReplyRenderFrame=null;
+    const touchedNotes=new Set();
+    threadReplyRealtimeQueue.forEach(({note:targetNote,update:item})=>{
+      const replies=targetNote.replies||(targetNote.replies=[]);
+      const index=replies.findIndex(reply=>reply.id===item.data.id);
+      const previousCommit=index>=0?replies[index]._realtimeCommitTimestamp:null;
+      if(previousCommit&&item.commitTimestamp&&previousCommit>item.commitTimestamp)return;
+      if(item.event==='DELETE'||item.data.status!=='active'){
+        if(index>=0)replies.splice(index,1);
+      }else{
+        const next={...item.data,_realtimeCommitTimestamp:item.commitTimestamp||previousCommit||null};
+        if(index>=0)replies[index]={...replies[index],...next};
+        else replies.push(next);
+      }
+      touchedNotes.add(targetNote);
+    });
+    threadReplyRealtimeQueue.clear();
+    touchedNotes.forEach(targetNote=>{
+      if(window.threadData)renderThreadContent(targetNote);
+    });
+  });
+}
+
+function queueThreadNoteRealtimeUpdate(note,update){
+  if(!update?.data?.id)return;
+  const queued=threadNoteRealtimeQueue.get(update.data.id);
+  if(!queued||!queued.update.commitTimestamp||!update.commitTimestamp||queued.update.commitTimestamp<=update.commitTimestamp){
+    threadNoteRealtimeQueue.set(update.data.id,{note,update});
+  }
+  if(threadNoteRenderFrame)return;
+  threadNoteRenderFrame=requestAnimationFrame(()=>{
+    threadNoteRenderFrame=null;
+    threadNoteRealtimeQueue.forEach(({note:targetNote,update:item})=>{
+      const previousCommit=targetNote._realtimeCommitTimestamp;
+      if(previousCommit&&item.commitTimestamp&&previousCommit>item.commitTimestamp)return;
+      Object.assign(targetNote,item.data,{
+        _realtimeCommitTimestamp:item.commitTimestamp||previousCommit||null
+      });
+      if(window.threadData)renderThreadContent(targetNote);
+    });
+    threadNoteRealtimeQueue.clear();
+  });
 }
 
 async function openThreadModal(cluster){
@@ -698,23 +960,29 @@ async function openThreadModal(cluster){
   }
   
   // 綁定事件
-  $('#thread-prev').onclick=()=>{
+  $('#thread-prev').onclick=async()=>{
     if(window.threadData.currentIndex>0){
       window.threadData.currentIndex--;
-      renderThreadContent(cluster[window.threadData.currentIndex].note);
+      const note=cluster[window.threadData.currentIndex].note;
+      await hydrateThreadNote(note).catch(()=>{});
+      renderThreadContent(note);
     }
   };
   
-  $('#thread-next').onclick=()=>{
+  $('#thread-next').onclick=async()=>{
     if(window.threadData.currentIndex<cluster.length-1){
       window.threadData.currentIndex++;
-      renderThreadContent(cluster[window.threadData.currentIndex].note);
+      const note=cluster[window.threadData.currentIndex].note;
+      await hydrateThreadNote(note).catch(()=>{});
+      renderThreadContent(note);
     }
   };
   
   $('#close-thread').onclick=()=>closeThreadModal();
   
   $('#thread-reply-submit').onclick=async()=>{
+    const submitButton=$('#thread-reply-submit');
+    if(submitButton.disabled)return;
     const text=$('#thread-reply-text').value.trim();
     if(!text){toast('請輸入回覆內容');return;}
     
@@ -724,11 +992,13 @@ async function openThreadModal(cluster){
     }
 
     try{
+      submitButton.disabled=true;
       const currentNote=cluster[window.threadData.currentIndex].note;
-      const result=await api.addReply(currentNote.id,text);
+      const mutationId=crypto.randomUUID?.()||`${Date.now()}-${Math.random()}`;
+      const result=await api.addReply(currentNote.id,text,null,mutationId);
       
       if(!currentNote.replies)currentNote.replies=[];
-      if(result.reply){
+      if(result.reply&&!currentNote.replies.some(reply=>reply.id===result.reply.id)){
         currentNote.replies.push(result.reply);
       }
       
@@ -738,6 +1008,8 @@ async function openThreadModal(cluster){
     }catch(err){
       console.error('回覆失敗:',err);
       toast('回覆失敗');
+    }finally{
+      submitButton.disabled=false;
     }
   };
   
@@ -773,17 +1045,17 @@ function renderThreadContent(note){
   `;
   
   // 回覆列表
-  const replies=orderedReplies(note.replies||[],window.threadData?.replySort);
+  const replies=orderedReplies(flattenReplies(note.replies||[]),window.threadData?.replySort);
   const repliesHTML=replies.length ? replies.map((r,i)=>`
-    <div style="padding:12px;padding-left:32px;border-bottom:1px solid #eee;background:#fafafa">
+    <div style="padding:12px;padding-left:${Math.min(88,32+(r._depth||0)*18)}px;border-bottom:1px solid #eee;background:#fafafa">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
-          <strong style="color:#555">${esc(r.public_alias||'\u533f\u540d\u4f7f\u7528\u8005')}</strong>
+          <strong style="color:#555">${esc(r.public_display_name||r.public_alias||'\u533f\u540d\u4f7f\u7528\u8005')}</strong>
           <span style="color:#999;font-size:0.85rem"> &middot; ${new Date(r.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
-          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" style="background:none;border:none;cursor:pointer">&#35738; ${r.upvote_count||0}</button>
-          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" style="background:none;border:none;cursor:pointer">&#20498;&#35738; ${r.downvote_count||0}</button>
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" aria-label="讚" title="讚" style="background:none;border:none;cursor:pointer">&#9650; ${r.upvote_count||0}</button>
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" aria-label="不讚" title="不讚" style="background:none;border:none;cursor:pointer">&#9660; ${r.downvote_count||0}</button>
         </div>
       </div>
       <p style="color:#666;line-height:1.5;margin:8px 0">${esc(r.content)}</p>
@@ -814,7 +1086,7 @@ function renderThreadContent(note){
     };
   }
   if(typeof realtimeClient !== 'undefined'){
-    const refreshReplies=async()=>{
+    const refreshRepliesLegacy=async()=>{
       try{
         const response=await api.getNoteReplies(note.id);
         note.replies=response.replies||[];
@@ -822,6 +1094,19 @@ function renderThreadContent(note){
       }catch(err){
         console.warn('無法同步最新回覆:',err);
       }
+    };
+    const refreshReplies=update=>{
+      queueThreadReplyRealtimeUpdate(note,update);
+      clearTimeout(threadRefreshTimer);
+      threadRefreshTimer=setTimeout(async()=>{
+        try{
+          const response=await api.getNoteReplies(note.id);
+          note.replies=dedupeById(response.replies||[]);
+          if(window.threadData)renderThreadContent(note);
+        }catch(err){
+          console.warn('Reply refresh failed:',err);
+        }
+      },120);
     };
     const refreshNote=async()=>{
       try{
@@ -832,19 +1117,11 @@ function renderThreadContent(note){
         console.warn('無法同步最新投票或收藏:',err);
       }
     };
-    realtimeClient.subscribeToReplies(note.id,refreshReplies);
-    realtimeClient.subscribeToVotes(note.id,refreshNote);
-    realtimeClient.subscribeToFavorites(note.id,refreshNote);
-    (note.replies||[]).forEach(reply=>{
-      realtimeClient.subscribeToReplyVotes(reply.id,refreshReplies);
-    });
+    threadRealtimeSubscriptionIds.add(realtimeClient.subscribeToReplies(note.id,refreshReplies));
     // 開啟討論串後立即監聽內容、投票與收藏計數，不必先互動才開始同步。
-    realtimeClient.subscribeToNoteChanges('engagement',note.id,update=>{
-      if(update.data){
-        Object.assign(note,update.data);
-        renderThreadContent(note);
-      }
-    });
+    threadRealtimeSubscriptionIds.add(realtimeClient.subscribeToNoteChanges('engagement',note.id,update=>{
+      if(update.data)queueThreadNoteRealtimeUpdate(note,update);
+    }));
   }
   
   // 綁定投票事件
@@ -924,6 +1201,17 @@ function renderThreadContent(note){
 function closeThreadModal(){
   $('#thread-modal').hidden=true;
   $('#backdrop').hidden=true;
+  clearTimeout(threadRefreshTimer);
+  if(threadReplyRenderFrame)cancelAnimationFrame(threadReplyRenderFrame);
+  if(threadNoteRenderFrame)cancelAnimationFrame(threadNoteRenderFrame);
+  threadReplyRenderFrame=null;
+  threadNoteRenderFrame=null;
+  threadReplyRealtimeQueue.clear();
+  threadNoteRealtimeQueue.clear();
+  if(typeof realtimeClient!=='undefined'){
+    [...threadRealtimeSubscriptionIds].forEach(id=>realtimeClient.unsubscribe(id).catch(()=>{}));
+  }
+  threadRealtimeSubscriptionIds.clear();
   window.threadData=null;
 }
 
@@ -1430,10 +1718,11 @@ function updateAuthUI(){
     applySettingsToControls();
     setCloudSettingsDisabled(true);
     closeUserMenu();
+    loadUserStats();
   }
 }
 
-function loadUserStats(){
+function loadUserStatsLegacy(){
   // 加載用戶統計數據
   try{
     // 本地統計
@@ -1456,6 +1745,23 @@ function loadUserStats(){
     }
   }catch(err){
     console.warn('加載用戶統計失敗:',err);
+  }
+}
+
+async function loadUserStats(){
+  const requestVersion=++statsRequestVersion;
+  if(!authManager?.isLoggedIn){
+    ['#stat-notes-count','#stat-upvotes','#stat-favorites'].forEach(selector=>{if($(selector))$(selector).textContent='0';});
+    return;
+  }
+  try{
+    const stats=await api.getStats();
+    if(requestVersion!==statsRequestVersion||!authManager.isLoggedIn)return;
+    if($('#stat-notes-count'))$('#stat-notes-count').textContent=String(stats.totalNotes||0);
+    if($('#stat-upvotes'))$('#stat-upvotes').textContent=String(stats.totalUpvotes||0);
+    if($('#stat-favorites'))$('#stat-favorites').textContent=String(stats.totalFavorites||0);
+  }catch(error){
+    console.warn('User stats refresh failed:',error);
   }
 }
 
@@ -1537,6 +1843,8 @@ async function initializeSettings(){
       if(thresholdValueEl)thresholdValueEl.textContent=thresholdEl.value+'%';
       thresholdEl.oninput=e=>{
         thresholdValueEl.textContent=e.target.value+'%';
+        currentNoteThresholdPercent=parseInt(e.target.value,10);
+        handleThresholdChange();
       };
       thresholdEl.onchange=async e=>{
         const previous=e.target.dataset.savedValue||'50';
@@ -1545,6 +1853,8 @@ async function initializeSettings(){
           e.target.dataset.savedValue=String(next);
         }else{
           e.target.value=previous;
+          currentNoteThresholdPercent=parseInt(previous,10);
+          handleThresholdChange();
           if(thresholdValueEl)thresholdValueEl.textContent=previous+'%';
         }
       };
@@ -1684,6 +1994,7 @@ async function updateSetting(key,value){
     const settings={};
     settings[key]=value;
     await api.updateUserSettings(settings);
+    if(key==='noteVisibilityThresholdPercent')currentNoteThresholdPercent=Number(value);
     if(key==='allowPublicNotes'||key==='noteVisibilityThresholdPercent'){
       handleThresholdChange();
     }
@@ -1821,7 +2132,7 @@ function navigateToFavorite(noteId,articleId){
 }
 
 // ===== 通知列表 =====
-async function loadNotificationsList(){
+async function loadNotificationsListLegacy(){
   try{
     const response=await api.getNotifications();
     const notificationsList=$('#notifications-list');
@@ -1854,6 +2165,74 @@ async function loadNotificationsList(){
     const notificationsList=$('#notifications-list');
     notificationsList.innerHTML='<div style="padding:12px;text-align:center;color:#888">尚無通知</div>';
   }
+}
+
+function notificationItemHTML(notif){
+  const title=notif.type==='reply'?'有人回覆了你的註記':'系統通知';
+  return `<div class="notification-item" data-notification-id="${esc(notif.id)}" style="padding:12px;border-bottom:1px solid #eee;cursor:pointer;background:${notif.read_at?'#fff':'#f9f9f9'}" onclick="navigateToNotification('${esc(notif.id)}','${esc(notif.note_id||notif.target_id||'')}')">
+    <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:4px">
+      <strong style="color:#333">${title}</strong>
+      <span style="font-size:0.85rem;color:#999">${new Date(notif.created_at).toLocaleDateString('zh-TW')}</span>
+    </div>
+    <p style="color:#666;font-size:0.9rem;margin:4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(notif.message||'')}</p>
+    ${!notif.read_at?'<div style="font-size:0.8rem;color:#963b2e">尚未讀取</div>':''}
+  </div>`;
+}
+
+function renderNotificationCache(){
+  const list=$('#notifications-list');
+  if(!list)return;
+  list.innerHTML=notificationCache.length
+    ? notificationCache.map(notificationItemHTML).join('')
+    : '<div style="padding:12px;text-align:center;color:#888">尚無通知</div>';
+}
+
+async function loadNotificationsList(){
+  const list=$('#notifications-list');
+  if(!authManager?.isLoggedIn){
+    notificationCache=[];
+    renderNotificationCache();
+    return;
+  }
+  try{
+    const response=await api.getNotifications();
+    notificationCache=dedupeById(response?.notifications||[])
+      .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    renderNotificationCache();
+  }catch(err){
+    console.error('Notification refresh failed:',err);
+    if(!notificationCache.length&&list)list.innerHTML='<div style="padding:12px;text-align:center;color:#888">尚無通知</div>';
+  }
+}
+
+function handleNotificationRealtimeUpdate(update){
+  const changed=update?.data;
+  if(!changed?.id)return;
+  const queued=notificationRealtimeQueue.get(changed.id);
+  if(!queued||!queued.commitTimestamp||!update.commitTimestamp||queued.commitTimestamp<=update.commitTimestamp){
+    notificationRealtimeQueue.set(changed.id,update);
+  }
+  if(notificationRenderFrame)return;
+  notificationRenderFrame=requestAnimationFrame(()=>{
+    notificationRenderFrame=null;
+    notificationRealtimeQueue.forEach(item=>{
+      const index=notificationCache.findIndex(notification=>notification.id===item.data.id);
+      const previousCommit=index>=0?notificationCache[index]._realtimeCommitTimestamp:null;
+      if(previousCommit&&item.commitTimestamp&&previousCommit>item.commitTimestamp)return;
+      if(item.event==='DELETE'){
+        if(index>=0)notificationCache.splice(index,1);
+      }else{
+        const next={...item.data,_realtimeCommitTimestamp:item.commitTimestamp||previousCommit||null};
+        if(index>=0)notificationCache[index]={...notificationCache[index],...next};
+        else notificationCache.push(next);
+      }
+    });
+    notificationRealtimeQueue.clear();
+    notificationCache.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    renderNotificationCache();
+    clearTimeout(notificationStatsTimer);
+    notificationStatsTimer=setTimeout(()=>loadUserStats(),120);
+  });
 }
 
 function navigateToNotification(notificationId,referenceId){

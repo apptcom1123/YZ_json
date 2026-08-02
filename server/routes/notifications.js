@@ -16,13 +16,10 @@ router.get('/', requireAuth, async (req, res) => {
     const { limit = 50, offset = 0 } = req.query;
     const { notification: notificationRepo } = req.app.locals.repositories;
 
-    const notifications = await notificationRepo.getUserNotifications(
-      req.user.userId,
-      parseInt(limit),
-      parseInt(offset)
-    );
-
-    const summary = await notificationRepo.getNotificationSummary(req.user.userId);
+    const [notifications, summary] = await Promise.all([
+      notificationRepo.getUserNotifications(req.user.userId, parseInt(limit), parseInt(offset)),
+      notificationRepo.getNotificationSummary(req.user.userId)
+    ]);
 
     res.json({
       notifications,

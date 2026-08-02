@@ -86,6 +86,8 @@ CREATE INDEX IF NOT EXISTS idx_notes_visibility ON notes(visibility, article_id,
 CREATE INDEX IF NOT EXISTS idx_notes_score ON notes(article_id, paragraph_anchor, score DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notes_created ON notes(created_at);
 CREATE INDEX IF NOT EXISTS idx_notes_local_uuid ON notes(local_uuid);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_notes_author_local_uuid ON notes(author_id, local_uuid) WHERE local_uuid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_public_article_render ON notes(article_id, cluster_key, score DESC, created_at DESC) WHERE visibility = 'public' AND status = 'active' AND deleted_at IS NULL;
 
 -- Note Votes table
 CREATE TABLE IF NOT EXISTS note_votes (
@@ -116,6 +118,7 @@ CREATE TABLE IF NOT EXISTS note_replies (
   parent_reply_id TEXT,
   author_id TEXT NOT NULL,
   content TEXT NOT NULL,
+  client_mutation_id TEXT,
   upvote_count INTEGER DEFAULT 0,
   downvote_count INTEGER DEFAULT 0,
   status TEXT DEFAULT 'active' CHECK(status IN ('active', 'hidden', 'deleted')),
@@ -129,6 +132,8 @@ CREATE TABLE IF NOT EXISTS note_replies (
 CREATE INDEX IF NOT EXISTS idx_note_replies_note ON note_replies(note_id);
 CREATE INDEX IF NOT EXISTS idx_note_replies_parent ON note_replies(parent_reply_id);
 CREATE INDEX IF NOT EXISTS idx_note_replies_author ON note_replies(author_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_note_replies_client_mutation ON note_replies(note_id, author_id, client_mutation_id) WHERE client_mutation_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_note_replies_note_render ON note_replies(note_id, upvote_count DESC, created_at DESC) WHERE status = 'active';
 
 -- Reply Votes table
 CREATE TABLE IF NOT EXISTS reply_votes (
@@ -185,6 +190,8 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_reply_recipient ON notifications(user_id, reply_id) WHERE type = 'reply' AND reply_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, created_at DESC) WHERE is_read = false;
 
 -- User Stats table
 CREATE TABLE IF NOT EXISTS user_stats (

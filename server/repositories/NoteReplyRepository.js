@@ -8,19 +8,49 @@ export class NoteReplyRepository extends BaseRepository {
   /**
    * 在註記上添加回覆
    */
-  async addReply(noteId, authorId, content, parentReplyId = null) {
+  async addReply(noteId, authorId, content, parentReplyId = null, clientMutationId = null) {
     if (this.isSupabase) {
+      let useClientMutationId = Boolean(clientMutationId);
+      if (useClientMutationId) {
+        const { data: existing, error: existingError } = await this.db
+          .from('note_replies')
+          .select('id')
+          .eq('note_id', noteId)
+          .eq('author_id', authorId)
+          .eq('client_mutation_id', clientMutationId)
+          .maybeSingle();
+        if (existingError && (existingError.code === 'PGRST204' || existingError.code === '42703' || existingError.message?.includes('client_mutation_id'))) {
+          useClientMutationId = false;
+        } else if (existingError) {
+          throw existingError;
+        }
+        if (existing) return existing.id;
+      }
+
+      const insertData = {
+        note_id: noteId,
+        parent_reply_id: parentReplyId,
+        author_id: authorId,
+        content,
+        status: 'active'
+      };
+      if (useClientMutationId) insertData.client_mutation_id = clientMutationId;
       const { data, error } = await this.db
         .from('note_replies')
-        .insert({
-          note_id: noteId,
-          parent_reply_id: parentReplyId,
-          author_id: authorId,
-          content,
-          status: 'active'
-        })
+        .insert(insertData)
         .select('id')
         .single();
+      if (error?.code === '23505' && useClientMutationId) {
+        const { data: existing, error: existingError } = await this.db
+          .from('note_replies')
+          .select('id')
+          .eq('note_id', noteId)
+          .eq('author_id', authorId)
+          .eq('client_mutation_id', clientMutationId)
+          .single();
+        if (existingError) throw existingError;
+        return existing.id;
+      }
       if (error) throw error;
 
       await this.updateNoteReplyCount(noteId);

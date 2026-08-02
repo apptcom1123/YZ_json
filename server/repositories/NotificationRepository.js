@@ -10,18 +10,13 @@ export class NotificationRepository extends BaseRepository {
    */
   async createReplyNotification(userId, replyId, actorUserId, noteId, deepLink) {
     if (this.isSupabase) {
-      const { data: note, error: noteError } = await this.db
-        .from('notes')
-        .select('article_id, paragraph_anchor')
-        .eq('id', noteId)
-        .maybeSingle();
+      const [noteResult, actorResult] = await Promise.all([
+        this.db.from('notes').select('article_id, paragraph_anchor').eq('id', noteId).maybeSingle(),
+        this.db.from('users').select('public_display_name').eq('id', actorUserId).maybeSingle()
+      ]);
+      const { data: note, error: noteError } = noteResult;
+      const { data: actor, error: actorError } = actorResult;
       if (noteError) throw noteError;
-
-      const { data: actor, error: actorError } = await this.db
-        .from('users')
-        .select('public_display_name')
-        .eq('id', actorUserId)
-        .maybeSingle();
       if (actorError) throw actorError;
 
       const message = `${actor?.public_display_name || '匿名使用者'} 回覆了你的註解`;
@@ -42,6 +37,16 @@ export class NotificationRepository extends BaseRepository {
         })
         .select('id')
         .single();
+      if (error?.code === '23505') {
+        const { data: existing, error: existingError } = await this.db
+          .from('notifications')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('reply_id', replyId)
+          .single();
+        if (existingError) throw existingError;
+        return existing.id;
+      }
       if (error) throw error;
 
       await this.updateUnreadCount(userId);

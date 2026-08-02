@@ -46,7 +46,7 @@ router.get('/:noteId/replies', optionalAuth, async (req, res) => {
  */
 router.post('/:noteId/replies', requireAuth, async (req, res) => {
   try {
-    const { content, parentReplyId = null } = req.body;
+    const { content, parentReplyId = null, clientMutationId = null } = req.body;
 
     if (!content) {
       return res.status(400).json({
@@ -78,7 +78,8 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
       req.params.noteId,
       req.user.userId,
       content,
-      parentReplyId
+      parentReplyId,
+      clientMutationId
     );
 
     const reply = await replyRepo.findById(replyId);

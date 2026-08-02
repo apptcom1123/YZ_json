@@ -52,6 +52,19 @@ export class NoteRepository extends BaseRepository {
     }
 
     if (this.isSupabase) {
+      if (localUuid) {
+        const { data: existing, error: existingError } = await this.db
+          .from('notes')
+          .select('id')
+          .eq('author_id', authorId)
+          .eq('local_uuid', localUuid)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (existingError) throw existingError;
+        if (existing) return existing.id;
+      }
+
       const { data, error } = await this.db
         .from('notes')
         .insert({
@@ -70,6 +83,16 @@ export class NoteRepository extends BaseRepository {
         })
         .select('id')
         .single();
+      if (error?.code === '23505' && localUuid) {
+        const { data: existing, error: existingError } = await this.db
+          .from('notes')
+          .select('id')
+          .eq('author_id', authorId)
+          .eq('local_uuid', localUuid)
+          .single();
+        if (existingError) throw existingError;
+        return existing.id;
+      }
       if (error) throw error;
       return data.id;
     }
@@ -98,7 +121,7 @@ export class NoteRepository extends BaseRepository {
     if (this.isSupabase) {
       const { data, error } = await this.db
         .from('notes')
-        .select('*, users!notes_author_id_fkey(public_display_name)')
+        .select('*')
         .eq('article_id', articleId)
         .eq('paragraph_anchor', paragraphAnchor)
         .eq('visibility', 'public')
@@ -108,10 +131,7 @@ export class NoteRepository extends BaseRepository {
         .order('score', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return this.applyVisibilityThreshold((data || []).map(note => ({
-        ...note,
-        public_display_name: note.users?.public_display_name
-      })), thresholdPercent);
+      return this.applyVisibilityThreshold(data || [], thresholdPercent);
     }
 
     const query = `
@@ -170,7 +190,7 @@ export class NoteRepository extends BaseRepository {
     if (this.isSupabase) {
       const { data, error } = await this.db
         .from('notes')
-        .select('*, users!notes_author_id_fkey(public_display_name)')
+        .select('*')
         .eq('article_id', articleId)
         .eq('visibility', 'public')
         .eq('status', 'active')
@@ -179,10 +199,7 @@ export class NoteRepository extends BaseRepository {
         .order('score', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return this.applyVisibilityThreshold((data || []).map(note => ({
-        ...note,
-        public_display_name: note.users?.public_display_name
-      })), thresholdPercent);
+      return this.applyVisibilityThreshold(data || [], thresholdPercent);
     }
 
     return this.applyVisibilityThreshold(await this.db.all(`

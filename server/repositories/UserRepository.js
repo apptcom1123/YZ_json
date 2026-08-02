@@ -130,4 +130,19 @@ export class UserRepository extends BaseRepository {
     if (error) throw error;
     return data || null;
   }
+
+  async getEngagementStats(userId) {
+    const { data, error } = await this.db
+      .from('notes')
+      .select('upvote_count, favorite_count')
+      .eq('author_id', userId)
+      .eq('status', 'active')
+      .is('deleted_at', null);
+    if (error) throw error;
+    return (data || []).reduce((stats, note) => ({
+      totalNotes: stats.totalNotes + 1,
+      totalUpvotes: stats.totalUpvotes + Number(note.upvote_count || 0),
+      totalFavorites: stats.totalFavorites + Number(note.favorite_count || 0)
+    }), { totalNotes: 0, totalUpvotes: 0, totalFavorites: 0 });
+  }
 }

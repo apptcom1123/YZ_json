@@ -324,10 +324,11 @@ class APIClient {
   /**
    * 添加回覆
    */
-  addReply(noteId, content, parentReplyId = null) {
+  addReply(noteId, content, parentReplyId = null, clientMutationId = null) {
     return this.post(`/notes/${noteId}/replies`, {
       content,
-      parentReplyId
+      parentReplyId,
+      clientMutationId
     });
   }
 
