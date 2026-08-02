@@ -206,7 +206,7 @@ class APIClient {
   /**
    * 獲取公開註記
    */
-  getNotes(articleId, paragraphAnchor, thresholdPercent = 60) {
+  getNotes(articleId, paragraphAnchor, thresholdPercent = 50) {
     const params = new URLSearchParams({
       articleId,
       paragraphAnchor,

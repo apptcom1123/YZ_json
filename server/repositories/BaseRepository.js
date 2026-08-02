@@ -8,6 +8,18 @@ export class BaseRepository {
     this.hasDeletedAt = ['users', 'divination_records', 'notes', 'deletion_audit_logs'].includes(tableName);
   }
 
+  async callOptionalRpc(name,args){
+    const {data,error}=await this.db.rpc(name,args);
+    if(error){
+      const missing=error.code==='PGRST202'||error.code==='42883'
+        ||error.message?.includes('Could not find the function')
+        ||/function\s+.+does not exist/i.test(error.message||'');
+      if(missing)return null;
+      throw error;
+    }
+    return data;
+  }
+
   async findById(id) {
     let query = this.db.from(this.tableName).select('*').eq('id', id);
     if (this.hasDeletedAt) query = query.is('deleted_at', null);

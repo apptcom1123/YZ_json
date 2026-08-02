@@ -115,6 +115,16 @@ class RealtimeClient {
       }, payload => this.dispatchUpdate(id, payload)));
   }
 
+  subscribeToNoteActivity(noteId, onUpdate) {
+    const id = `activity:${noteId}`;
+    this.updateHandlers.set(id, onUpdate);
+    return this.register(id, client => client
+      .channel(`note:${noteId}:activity`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'realtime_note_events', filter: `note_id=eq.${noteId}`
+      }, payload => this.dispatchUpdate(id, payload)));
+  }
+
   subscribeToNotifications(userId, onUpdate) {
     return this.subscribeToUserTable('notifications', 'notifications', userId, onUpdate);
   }
@@ -127,7 +137,7 @@ class RealtimeClient {
     const id = `${type}:${userId}`;
     this.updateHandlers.set(id, onUpdate);
     return this.register(id, client => client
-      .channel(id)
+      .channel(`user:${userId}:${type === 'notifications' ? 'notifications' : 'sync'}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table, filter: `user_id=eq.${userId}`
       }, payload => this.dispatchUpdate(id, payload)));

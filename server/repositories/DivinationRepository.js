@@ -20,10 +20,10 @@ export class DivinationRepository extends BaseRepository {
           source,
           local_uuid: localUuid
         })
-        .select('id')
+        .select('*')
         .single();
       if (error) throw error;
-      return data.id;
+      return data;
     }
 
     const query = `
@@ -95,12 +95,6 @@ export class DivinationRepository extends BaseRepository {
    * 更新占卜記錄（編輯問題或結果）
    */
   async updateDivination(divinationId, userId, updates) {
-    // 驗證所有者
-    const record = await this.findById(divinationId);
-    if (record.user_id !== userId) {
-      throw new Error('NOT_RECORD_OWNER');
-    }
-
     const allowedKeys = ['question_text', 'result_payload'];
     const data = {};
 
@@ -117,14 +111,15 @@ export class DivinationRepository extends BaseRepository {
     }
 
     if (this.isSupabase) {
-      const { error } = await this.db
+      const {data:result,error}=await this.db
         .from('divination_records')
-        .update(data)
+        .update({...data,updated_at:new Date().toISOString()})
         .eq('id', divinationId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select('*')
+        .maybeSingle();
       if (error) throw error;
-
-      const result = await this.findById(divinationId);
+      if(!result)throw new Error('NOT_RECORD_OWNER');
       if (result.result_payload && typeof result.result_payload === 'string') {
         result.result_payload = JSON.parse(result.result_payload);
       }
@@ -155,18 +150,16 @@ export class DivinationRepository extends BaseRepository {
    * 刪除占卜記錄（軟刪除）
    */
   async deleteDivination(divinationId, userId) {
-    const record = await this.findById(divinationId);
-    if (record.user_id !== userId) {
-      throw new Error('NOT_RECORD_OWNER');
-    }
-
     if (this.isSupabase) {
-      const { error } = await this.db
+      const {data,error}=await this.db
         .from('divination_records')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', divinationId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select('id')
+        .maybeSingle();
       if (error) throw error;
+      if(!data)throw new Error('NOT_RECORD_OWNER');
       return;
     }
 

@@ -98,9 +98,9 @@ router.post('/', requireAuth, async (req, res) => {
 
     const { note: noteRepo, user: userRepo } = req.app.locals.repositories;
 
-    // 檢查用戶設置
-    let settings;
-    if (userRepo.isSupabase) {
+    // 公開註記才需要額外檢查公開權限；私人註記直接寫入。
+    let settings=null;
+    if(visibility==='public'&&userRepo.isSupabase){
       const { data, error } = await userRepo.db
         .from('user_settings')
         .select('allow_public_notes')
@@ -108,7 +108,7 @@ router.post('/', requireAuth, async (req, res) => {
         .maybeSingle();
       if (error) throw error;
       settings = data;
-    } else {
+    }else if(visibility==='public'){
       settings = await userRepo.db.get(`
         SELECT allow_public_notes FROM user_settings WHERE user_id = ?
       `, [req.user.userId]);
@@ -122,7 +122,7 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     // 創建註記
-    const noteId = await noteRepo.createNote({
+    const note = await noteRepo.createNote({
       authorId: req.user.userId,
       articleType,
       articleId,
@@ -133,8 +133,6 @@ router.post('/', requireAuth, async (req, res) => {
       visibility,
       localUuid
     });
-
-    const note = await noteRepo.findById(noteId);
 
     res.status(201).json({
       success: true,
@@ -155,8 +153,8 @@ router.post('/', requireAuth, async (req, res) => {
  */
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const { note: noteRepo } = req.app.locals.repositories;
-    const note = await noteRepo.findById(req.params.id);
+    const {note:noteRepo}=req.app.locals.repositories;
+    const note=await noteRepo.findById(req.params.id);
 
     if (!note) {
       return res.status(404).json({
@@ -201,8 +199,14 @@ router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const { content, visibility } = req.body;
 
-    const { note: noteRepo } = req.app.locals.repositories;
-    const note = await noteRepo.findById(req.params.id);
+    const {note:noteRepo}=req.app.locals.repositories;
+    const [note,publicSettingsResult]=await Promise.all([
+      noteRepo.findById(req.params.id),
+      visibility==='public'
+        ? req.app.locals.supabaseClient.from('user_settings').select('allow_public_notes').eq('user_id',req.user.userId).maybeSingle()
+        : Promise.resolve({data:null,error:null})
+    ]);
+    if(publicSettingsResult.error)throw publicSettingsResult.error;
 
     if (!note) {
       return res.status(404).json({
@@ -219,13 +223,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
     }
 
     if (visibility === 'public') {
-      const { data: settings, error: settingsError } = await req.app.locals.supabaseClient
-        .from('user_settings')
-        .select('allow_public_notes')
-        .eq('user_id', req.user.userId)
-        .maybeSingle();
-      if (settingsError) throw settingsError;
-      if (!settings?.allow_public_notes) {
+      if(!publicSettingsResult.data?.allow_public_notes){
         return res.status(403).json({
           error: 'PUBLIC_NOTES_DISABLED',
           message: '請先在設定中啟用公開註記。'
@@ -237,19 +235,25 @@ router.patch('/:id', requireAuth, async (req, res) => {
       note.content = content;
     }
 
-    if (visibility) {
-      await noteRepo.toggleVisibility(req.params.id, req.user.userId, visibility);
-      note.visibility = visibility;
-    }
-
-    await noteRepo.update(req.params.id, {
-      content: note.content,
-      visibility: note.visibility
-    });
+    if(visibility)note.visibility=visibility;
+    const updates={
+      content:note.content,
+      visibility:note.visibility,
+      public_alias:note.visibility==='public'?(note.public_alias||noteRepo.generatePublicAlias(req.user.userId,note.article_id)):null,
+      updated_at:new Date().toISOString()
+    };
+    const {data:updatedNote,error:updateError}=await noteRepo.db
+      .from('notes')
+      .update(updates)
+      .eq('id',req.params.id)
+      .eq('author_id',req.user.userId)
+      .select('*')
+      .single();
+    if(updateError)throw updateError;
 
     res.json({
       success: true,
-      note: await noteRepo.findById(req.params.id)
+      note:updatedNote
     });
   } catch (error) {
     console.error('Update note error:', error);
@@ -307,6 +311,11 @@ router.post('/:id/vote', requireAuth, async (req, res) => {
 
     const { note: noteRepo } = req.app.locals.repositories;
 
+    const atomicResult=await noteRepo.voteAtomic(req.params.id,req.user.userId,voteType);
+    if(atomicResult){
+      return res.json(atomicResult);
+    }
+
     const targetNote = await noteRepo.findById(req.params.id);
     if (!canReadNote(targetNote, req.user.userId)) {
       return res.status(403).json({
@@ -324,6 +333,9 @@ router.post('/:id/vote', requireAuth, async (req, res) => {
       userVote:result.userVote
     });
   } catch (error) {
+    if(error.message?.includes('IDENTITY_VERIFICATION_FAILED')){
+      return res.status(403).json({error:'IDENTITY_VERIFICATION_FAILED',message:'身分驗證失敗：無權對此註記投票'});
+    }
     console.error('Vote error:', error);
     res.status(500).json({
       error: 'VOTE_FAILED',
@@ -339,6 +351,11 @@ router.post('/:id/vote', requireAuth, async (req, res) => {
 router.post('/:id/favorite', requireAuth, async (req, res) => {
   try {
     const { note: noteRepo } = req.app.locals.repositories;
+
+    const atomicResult=await noteRepo.toggleFavoriteAtomic(req.params.id,req.user.userId);
+    if(atomicResult){
+      return res.json(atomicResult);
+    }
 
     const targetNote = await noteRepo.findById(req.params.id);
     if (!canReadNote(targetNote, req.user.userId)) {
@@ -357,6 +374,9 @@ router.post('/:id/favorite', requireAuth, async (req, res) => {
       note
     });
   } catch (error) {
+    if(error.message?.includes('IDENTITY_VERIFICATION_FAILED')){
+      return res.status(403).json({error:'IDENTITY_VERIFICATION_FAILED',message:'身分驗證失敗：無權收藏此註記'});
+    }
     console.error('Favorite error:', error);
     res.status(500).json({
       error: 'FAVORITE_FAILED',

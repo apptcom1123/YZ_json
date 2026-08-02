@@ -9,7 +9,7 @@ import { NoteRepository } from './repositories/NoteRepository.js';
 import { DivinationRepository } from './repositories/DivinationRepository.js';
 import { NoteReplyRepository } from './repositories/NoteReplyRepository.js';
 import { NotificationRepository } from './repositories/NotificationRepository.js';
-import { authMiddleware, attachUserInfo } from './middleware/auth.js';
+import { authMiddleware } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import notesRoutes from './routes/notes.js';
@@ -67,7 +67,6 @@ export async function createApp({ serveStatic = false } = {}) {
   };
 
   app.use(authMiddleware);
-  app.use(attachUserInfo);
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', database: 'supabase-postgresql', auth: 'supabase-google-oauth' }));
   app.use('/api/auth', authRoutes);
   app.use('/api/me', userRoutes);

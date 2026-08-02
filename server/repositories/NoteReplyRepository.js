@@ -8,25 +8,19 @@ export class NoteReplyRepository extends BaseRepository {
   /**
    * 在註記上添加回覆
    */
+  addReplyAtomic(noteId,authorId,content,parentReplyId=null,clientMutationId=null){
+    return this.callOptionalRpc('create_note_reply_tx',{
+      p_note_id:noteId,
+      p_user_id:authorId,
+      p_content:content,
+      p_parent_reply_id:parentReplyId,
+      p_client_request_id:clientMutationId
+    });
+  }
+
   async addReply(noteId, authorId, content, parentReplyId = null, clientMutationId = null) {
     if (this.isSupabase) {
       let useClientMutationId = Boolean(clientMutationId);
-      if (useClientMutationId) {
-        const { data: existing, error: existingError } = await this.db
-          .from('note_replies')
-          .select('id')
-          .eq('note_id', noteId)
-          .eq('author_id', authorId)
-          .eq('client_mutation_id', clientMutationId)
-          .maybeSingle();
-        if (existingError && (existingError.code === 'PGRST204' || existingError.code === '42703' || existingError.message?.includes('client_mutation_id'))) {
-          useClientMutationId = false;
-        } else if (existingError) {
-          throw existingError;
-        }
-        if (existing) return existing.id;
-      }
-
       const insertData = {
         note_id: noteId,
         parent_reply_id: parentReplyId,
@@ -35,11 +29,16 @@ export class NoteReplyRepository extends BaseRepository {
         status: 'active'
       };
       if (useClientMutationId) insertData.client_mutation_id = clientMutationId;
-      const { data, error } = await this.db
+      let {data,error}=await this.db
         .from('note_replies')
         .insert(insertData)
         .select('id')
         .single();
+      if(error&&useClientMutationId&&(error.code==='PGRST204'||error.code==='42703'||error.message?.includes('client_mutation_id'))){
+        delete insertData.client_mutation_id;
+        ({data,error}=await this.db.from('note_replies').insert(insertData).select('id').single());
+        useClientMutationId=false;
+      }
       if (error?.code === '23505' && useClientMutationId) {
         const { data: existing, error: existingError } = await this.db
           .from('note_replies')
@@ -230,6 +229,12 @@ export class NoteReplyRepository extends BaseRepository {
   /**
    * 為回覆投票
    */
+  voteReplyAtomic(noteId,replyId,userId,voteType){
+    return this.callOptionalRpc('toggle_reply_vote_tx',{
+      p_note_id:noteId,p_reply_id:replyId,p_user_id:userId,p_vote_type:voteType
+    });
+  }
+
   async voteReply(replyId, userId, voteType) {
     if (this.isSupabase) {
       const { data: existing, error: findError } = await this.db

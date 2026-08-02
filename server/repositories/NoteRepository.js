@@ -52,19 +52,6 @@ export class NoteRepository extends BaseRepository {
     }
 
     if (this.isSupabase) {
-      if (localUuid) {
-        const { data: existing, error: existingError } = await this.db
-          .from('notes')
-          .select('id')
-          .eq('author_id', authorId)
-          .eq('local_uuid', localUuid)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (existingError) throw existingError;
-        if (existing) return existing.id;
-      }
-
       const { data, error } = await this.db
         .from('notes')
         .insert({
@@ -81,20 +68,20 @@ export class NoteRepository extends BaseRepository {
           local_uuid: localUuid,
           status: 'active'
         })
-        .select('id')
+        .select('*')
         .single();
       if (error?.code === '23505' && localUuid) {
         const { data: existing, error: existingError } = await this.db
           .from('notes')
-          .select('id')
+          .select('*')
           .eq('author_id', authorId)
           .eq('local_uuid', localUuid)
           .single();
         if (existingError) throw existingError;
-        return existing.id;
+        return existing;
       }
       if (error) throw error;
-      return data.id;
+      return data;
     }
 
     const query = `
@@ -322,6 +309,12 @@ export class NoteRepository extends BaseRepository {
   /**
    * 投票（上 / 下 / 取消）
    */
+  voteAtomic(noteId,userId,voteType){
+    return this.callOptionalRpc('toggle_note_vote_tx',{
+      p_note_id:noteId,p_user_id:userId,p_vote_type:voteType
+    });
+  }
+
   async vote(noteId, userId, voteType) {
     if (this.isSupabase) {
       const { data: existing, error: findError } = await this.db
@@ -405,6 +398,12 @@ export class NoteRepository extends BaseRepository {
   /**
    * 收藏/取消收藏
    */
+  toggleFavoriteAtomic(noteId,userId){
+    return this.callOptionalRpc('toggle_note_favorite_tx',{
+      p_note_id:noteId,p_user_id:userId
+    });
+  }
+
   async toggleFavorite(noteId, userId) {
     if (this.isSupabase) {
       const { data: existing, error: findError } = await this.db

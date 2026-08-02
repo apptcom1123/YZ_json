@@ -69,23 +69,16 @@ router.patch('/:id/read', requireAuth, async (req, res) => {
   try {
     const { notification: notificationRepo } = req.app.locals.repositories;
 
-    // 驗證通知屬於當前用戶
-    const notif = await notificationRepo.findById(req.params.id);
-    if (!notif || notif.user_id !== req.user.userId) {
-      return res.status(404).json({
-        error: 'NOTIFICATION_NOT_FOUND',
-        message: '通知不存在'
-      });
-    }
-
-    await notificationRepo.markAsRead(req.params.id);
-    await notificationRepo.updateUnreadCount(req.user.userId);
+    await notificationRepo.markAsRead(req.params.id,req.user.userId);
 
     res.json({
       success: true,
       message: '已標記為已讀'
     });
   } catch (error) {
+    if(error.message==='NOT_NOTIFICATION_OWNER'){
+      return res.status(403).json({error:'IDENTITY_VERIFICATION_FAILED',message:'身分驗證失敗：非通知持有者本人'});
+    }
     console.error('Mark as read error:', error);
     res.status(500).json({
       error: 'MARK_READ_FAILED',
@@ -103,7 +96,6 @@ router.patch('/read-all', requireAuth, async (req, res) => {
     const { notification: notificationRepo } = req.app.locals.repositories;
 
     await notificationRepo.markAllAsRead(req.user.userId);
-    await notificationRepo.updateUnreadCount(req.user.userId);
 
     res.json({
       success: true,

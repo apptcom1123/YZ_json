@@ -13,36 +13,60 @@ export class UserRepository extends BaseRepository {
     const now = new Date().toISOString();
     const googleSub = identity?.identity_data?.sub || metadata.sub || authUser.id;
     const displayName = metadata.full_name || metadata.name || authUser.email || '使用者';
-    const { error } = await this.db.from('users').upsert({
+    const existing=await this.findById(authUser.id);
+    if(existing){
+      await this.ensureAccountRows(authUser.id);
+      return existing;
+    }
+    const {data:user,error}=await this.db.from('users').insert({
       id: authUser.id, google_sub: googleSub, email: authUser.email,
       display_name: displayName, public_display_name: displayName,
       avatar_url: metadata.avatar_url || metadata.picture || null, last_login_at: now,
       is_active: true, updated_at: now
-    }, { onConflict: 'id' });
-    if (error) throw error;
-    const { error: settingsError } = await this.db.from('user_settings').upsert({ user_id: authUser.id }, { onConflict: 'user_id', ignoreDuplicates: true });
-    if (settingsError) throw settingsError;
-    const { error: statsError } = await this.db.from('user_stats').upsert({ user_id: authUser.id }, { onConflict: 'user_id', ignoreDuplicates: true });
-    if (statsError) throw statsError;
-    return this.findById(authUser.id);
+    }).select('*').single();
+    if(error?.code==='23505'){
+      await this.ensureAccountRows(authUser.id);
+      return this.findById(authUser.id);
+    }
+    if(error)throw error;
+    await this.ensureAccountRows(authUser.id);
+    return user;
+  }
+
+  async ensureAccountRows(userId){
+    const [settingsResult,statsResult]=await Promise.all([
+      this.db.from('user_settings').upsert({user_id:userId},{onConflict:'user_id',ignoreDuplicates:true}),
+      this.db.from('user_stats').upsert({user_id:userId},{onConflict:'user_id',ignoreDuplicates:true})
+    ]);
+    if(settingsResult.error)throw settingsResult.error;
+    if(statsResult.error)throw statsResult.error;
   }
 
   async getUserWithSettings(userId) {
-    const user = await this.findById(userId);
+    const [user,settingsResult]=await Promise.all([
+      this.findById(userId),
+      this.db.from('user_settings').select('*').eq('user_id',userId).maybeSingle()
+    ]);
     if (!user) return null;
-    const { data, error } = await this.db.from('user_settings').select('*').eq('user_id', userId).maybeSingle();
-    if (error) throw error;
-    return { ...user, ...(data || {}) };
+    if(settingsResult.error)throw settingsResult.error;
+    return {...user,...(settingsResult.data||{})};
   }
 
   async updateUserSettings(userId, settings) {
     const allowed = ['save_notes_to_cloud', 'save_divination_to_cloud', 'allow_public_notes', 'note_visibility_threshold_percent', 'language', 'timezone', 'notify_on_reply'];
     const updates = Object.fromEntries(Object.entries(settings).filter(([key]) => allowed.includes(key)));
     if (Object.keys(updates).length) {
-      const { error } = await this.db.from('user_settings').update({ ...updates, updated_at: new Date().toISOString() }).eq('user_id', userId);
+      const {data,error}=await this.db.from('user_settings')
+        .update({...updates,updated_at:new Date().toISOString()})
+        .eq('user_id',userId)
+        .select('*')
+        .single();
       if (error) throw error;
+      return data;
     }
-    return this.getUserWithSettings(userId);
+    const {data,error}=await this.db.from('user_settings').select('*').eq('user_id',userId).maybeSingle();
+    if(error)throw error;
+    return data||{};
   }
 
   async updateProfile(userId, { displayName }) {
@@ -114,8 +138,8 @@ export class UserRepository extends BaseRepository {
     for (const operation of operations) { const { error } = await operation; if (error) throw error; }
   }
 
-  async canLogin(userId) {
-    const user = await this.findById(userId);
+  async canLogin(userId,user=null) {
+    user=user||await this.findById(userId);
     if (!user) return { allowed: false, reason: 'USER_NOT_FOUND' };
     if (!user.is_active) return { allowed: false, reason: 'ACCOUNT_DISABLED', disabledReason: user.disabled_reason };
     const { data, error } = await this.db.from('user_settings').select('terms_accepted, accepted_terms_version').eq('user_id', userId).maybeSingle();
@@ -123,6 +147,21 @@ export class UserRepository extends BaseRepository {
     return data?.terms_accepted && data?.accepted_terms_version === CURRENT_TERMS_VERSION
       ? { allowed: true }
       : { allowed: false, reason: 'TERMS_NOT_ACCEPTED' };
+  }
+
+  async getLoginEligibility(userId){
+    const [user,settingsResult]=await Promise.all([
+      this.findById(userId),
+      this.db.from('user_settings').select('terms_accepted, accepted_terms_version').eq('user_id',userId).maybeSingle()
+    ]);
+    if(settingsResult.error)throw settingsResult.error;
+    let login;
+    if(!user)login={allowed:false,reason:'USER_NOT_FOUND'};
+    else if(!user.is_active)login={allowed:false,reason:'ACCOUNT_DISABLED',disabledReason:user.disabled_reason};
+    else login=settingsResult.data?.terms_accepted&&settingsResult.data?.accepted_terms_version===CURRENT_TERMS_VERSION
+      ? {allowed:true}
+      : {allowed:false,reason:'TERMS_NOT_ACCEPTED'};
+    return {user,login};
   }
 
   async getUserStats(userId) {

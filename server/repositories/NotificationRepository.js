@@ -8,18 +8,9 @@ export class NotificationRepository extends BaseRepository {
   /**
    * 創建回覆通知
    */
-  async createReplyNotification(userId, replyId, actorUserId, noteId, deepLink) {
+  async createReplyNotification(userId, replyId, actorUserId, note, deepLink, actorName = null) {
     if (this.isSupabase) {
-      const [noteResult, actorResult] = await Promise.all([
-        this.db.from('notes').select('article_id, paragraph_anchor').eq('id', noteId).maybeSingle(),
-        this.db.from('users').select('public_display_name').eq('id', actorUserId).maybeSingle()
-      ]);
-      const { data: note, error: noteError } = noteResult;
-      const { data: actor, error: actorError } = actorResult;
-      if (noteError) throw noteError;
-      if (actorError) throw actorError;
-
-      const message = `${actor?.public_display_name || '匿名使用者'} 回覆了你的註解`;
+      const message = `${actorName || '匿名使用者'} 回覆了你的註解`;
       const { data, error } = await this.db
         .from('notifications')
         .insert({
@@ -28,7 +19,7 @@ export class NotificationRepository extends BaseRepository {
           actor_user_id: actorUserId,
           target_type: 'reply',
           target_id: replyId,
-          note_id: noteId,
+          note_id: note.id,
           reply_id: replyId,
           article_id: note?.article_id,
           paragraph_anchor: note?.paragraph_anchor,
@@ -49,13 +40,12 @@ export class NotificationRepository extends BaseRepository {
       }
       if (error) throw error;
 
-      await this.updateUnreadCount(userId);
       return data.id;
     }
 
-    const note = await this.db.get(`
+    const localNote = await this.db.get(`
       SELECT article_id, paragraph_anchor FROM notes WHERE id = ?
-    `, [noteId]);
+    `, [note.id]);
 
     const query = `
       INSERT INTO notifications (
@@ -74,10 +64,10 @@ export class NotificationRepository extends BaseRepository {
       userId,
       actorUserId,
       replyId,
-      noteId,
+      note.id,
       replyId,
-      note?.article_id,
-      note?.paragraph_anchor,
+      localNote?.article_id,
+      localNote?.paragraph_anchor,
       deepLink,
       message
     ]);
@@ -169,13 +159,17 @@ export class NotificationRepository extends BaseRepository {
   /**
    * 標記通知為已讀
    */
-  async markAsRead(notificationId) {
+  async markAsRead(notificationId,userId) {
     if (this.isSupabase) {
-      const { error } = await this.db
+      const {data,error}=await this.db
         .from('notifications')
         .update({ is_read: true, read_at: new Date().toISOString() })
-        .eq('id', notificationId);
+        .eq('id', notificationId)
+        .eq('user_id',userId)
+        .select('id')
+        .maybeSingle();
       if (error) throw error;
+      if(!data)throw new Error('NOT_NOTIFICATION_OWNER');
       return;
     }
 

@@ -46,15 +46,13 @@ router.post('/', requireAuth, async (req, res) => {
 
     const { divination: divinationRepo } = req.app.locals.repositories;
 
-    const recordId = await divinationRepo.createDivination(
+    const record = await divinationRepo.createDivination(
       req.user.userId,
       guaId,
       questionText || null,
       resultPayload,
       'cloud'
     );
-
-    const record = await divinationRepo.findById(recordId);
 
     res.status(201).json({
       success: true,

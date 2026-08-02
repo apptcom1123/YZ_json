@@ -5,8 +5,16 @@ async function resolveSupabaseUser(req) {
   if (!header?.startsWith('Bearer ')) return null;
   const token = header.slice(7).trim();
   if (!token || !req.app.locals.supabaseAuthClient) return null;
-  const { data, error } = await req.app.locals.supabaseAuthClient.auth.getUser(token);
-  return error || !data.user ? null : data.user;
+  const { data, error } = await req.app.locals.supabaseAuthClient.auth.getClaims(token);
+  const claims=data?.claims;
+  if(error||!claims?.sub)return null;
+  return {
+    id:claims.sub,
+    email:claims.email||null,
+    user_metadata:claims.user_metadata||{},
+    app_metadata:claims.app_metadata||{},
+    identities:[]
+  };
 }
 
 export async function authMiddleware(req, _res, next) {
@@ -33,10 +41,10 @@ export function requireSession(req, res, next) {
 export async function requireAuth(req, res, next) {
   if (!req.user) return requireSession(req, res, next);
   try {
-    const user = req.userInfo || await req.app.locals.repositories.user.findById(req.user.userId);
-    const login = user
-      ? await req.app.locals.repositories.user.canLogin(user.id)
-      : { allowed: false, reason: 'USER_NOT_FOUND' };
+    const eligibility=await req.app.locals.repositories.user.getLoginEligibility(req.user.userId);
+    const user=eligibility.user;
+    const login=eligibility.login;
+    req.userInfo=user;
     if (!login.allowed) {
       const message = login.reason === 'TERMS_NOT_ACCEPTED'
         ? '身分驗證失敗：請先在此瀏覽器接受使用條款。'

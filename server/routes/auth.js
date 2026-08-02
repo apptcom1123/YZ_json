@@ -23,10 +23,10 @@ router.get('/status', async (req, res, next) => {
       });
     }
 
-    const user = req.userInfo || await req.app.locals.repositories.user.findById(req.user.userId);
+    const user = await req.app.locals.repositories.user.upsertFromSupabaseAuth(req.authUser);
     if (!user) return res.status(404).json({ error: 'USER_NOT_FOUND', message: '找不到使用者資料' });
 
-    const login = await req.app.locals.repositories.user.canLogin(user.id);
+    const login = await req.app.locals.repositories.user.canLogin(user.id,user);
     res.json({
       loggedIn: login.allowed,
       loginBlocked: !login.allowed,

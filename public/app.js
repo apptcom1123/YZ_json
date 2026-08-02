@@ -39,7 +39,6 @@ const personalNoteCache=new Map();
 const PERSONAL_CONTENT_CACHE_TTL=60000;
 const pendingEngagementActions=new Set();
 let personalCacheUserId=null;
-let notificationStatsTimer=null;
 const notificationRealtimeQueue=new Map();
 let notificationRenderFrame=null;
 const threadReplyRealtimeQueue=new Map();
@@ -278,6 +277,7 @@ function bindUI(){
     $('#save-nickname-btn').onclick=async (e)=>{
       e.stopPropagation();
       const input=$('#nickname-input');
+      const saveButton=$('#save-nickname-btn');
       const newNickname=input.value.trim();
       
       if(!newNickname){
@@ -285,25 +285,31 @@ function bindUI(){
         return;
       }
       
-      try{
-        // 更新本地用戶信息
-        if(authManager.getCurrentUser){
-          const user=authManager.getCurrentUser();
-          if(user){
-            const result=await api.updateProfile({displayName:newNickname});
-            user.displayName=result.user.displayName;
-            authManager.notifyListeners();
-
-            // 更新 UI
-            $('#nickname-edit-form').style.display='none';
-            toast('暱稱已更新');
-            
-            // 如果有 API 可用，也發送到後端
-          }
+      const user=authManager.getCurrentUser?.();
+      if(!user)return;
+      const previousNickname=user.displayName;
+      const renderNickname=name=>{
+        user.displayName=name;
+        if($('#user-nickname'))$('#user-nickname').textContent=name;
+        if($('#user-menu-toggle')){
+          $('#user-menu-toggle').textContent=name.trim().slice(0,1).toUpperCase()||'●';
+          $('#user-menu-toggle').setAttribute('aria-label',`${name} 的用戶選單`);
         }
+      };
+      renderNickname(newNickname);
+      $('#nickname-edit-form').style.display='none';
+      toast('暱稱已更新');
+      try{
+        saveButton.disabled=true;
+        const result=await api.updateProfile({displayName:newNickname});
+        renderNickname(result.user.displayName);
       }catch(err){
         console.error('更新暱稱失敗:', err);
+        renderNickname(previousNickname||user.email||'使用者');
+        $('#nickname-edit-form').style.display='block';
         alert('更新暱稱失敗');
+      }finally{
+        saveButton.disabled=false;
       }
     };
   }
@@ -994,6 +1000,81 @@ function findReplyById(replies,replyId){
   return null;
 }
 
+async function sendThreadReply(note,reply,submitButton=null){
+  if(reply._sending)return;
+  const wasFailed=reply._failed;
+  if(wasFailed)note.reply_count=(Number(note.reply_count)||0)+1;
+  reply._pending=true;
+  reply._failed=false;
+  reply._sending=true;
+  if(submitButton)submitButton.disabled=true;
+  renderThreadContent(note);
+  try{
+    const result=await api.addReply(note.id,reply.content,null,reply._clientMutationId);
+    const official=result.reply;
+    const temporaryIndex=note.replies.findIndex(item=>item.id===reply.id);
+    const existingIndex=official?note.replies.findIndex(item=>item.id===official.id):-1;
+    if(existingIndex>=0&&existingIndex!==temporaryIndex){
+      note.replies[existingIndex]={...note.replies[existingIndex],...official};
+      if(temporaryIndex>=0)note.replies.splice(temporaryIndex,1);
+    }else if(temporaryIndex>=0&&official){
+      note.replies.splice(temporaryIndex,1,official);
+    }else if(official&&existingIndex<0){
+      note.replies.push(official);
+    }
+    if(result.version)note._activityVersion=Math.max(Number(note._activityVersion)||0,Number(result.version)||0);
+    cacheThreadReplies(note);
+    renderThreadContent(note);
+    toast('回覆成功');
+  }catch(err){
+    console.error('回覆失敗:',err);
+    const committed=note.replies.some(item=>
+      item.client_mutation_id===reply._clientMutationId&&!item._pending&&!item._failed
+    );
+    if(committed){
+      cacheThreadReplies(note);
+      renderThreadContent(note);
+      toast('回覆已送出');
+      return;
+    }
+    reply._pending=false;
+    reply._failed=true;
+    reply._sending=false;
+    note.reply_count=Math.max(0,(Number(note.reply_count)||1)-1);
+    cacheThreadReplies(note);
+    renderThreadContent(note);
+    toast(err.message||'回覆失敗，可重新傳送');
+  }finally{
+    reply._sending=false;
+    if(submitButton)submitButton.disabled=false;
+  }
+}
+
+function queueThreadActivityUpdate(note,update){
+  const row=update?.data;
+  const version=Number(row?.version)||0;
+  if(!row||version<=(Number(note._activityVersion)||0))return;
+  note._activityVersion=version;
+  const payload=row.payload||{};
+  if(row.event_type==='note.vote.updated'){
+    note.upvote_count=payload.upvote_count;
+    note.downvote_count=payload.downvote_count;
+    note.score=payload.score;
+  }else if(row.event_type==='note.favorite.updated'){
+    note.favorite_count=payload.favorite_count;
+  }else if(row.event_type==='reply.vote.updated'){
+    const reply=findReplyById(note.replies,payload.reply_id);
+    if(reply){
+      reply.upvote_count=payload.upvote_count;
+      reply.downvote_count=payload.downvote_count;
+      reply._activityVersion=version;
+    }
+  }else if(row.event_type==='reply.created'){
+    note.reply_count=payload.reply_count;
+  }
+  if(window.threadData)requestAnimationFrame(()=>renderThreadContent(note));
+}
+
 function queueThreadReplyRealtimeUpdate(note,update){
   if(!update?.data?.id)return;
   const queued=threadReplyRealtimeQueue.get(update.data.id);
@@ -1006,6 +1087,9 @@ function queueThreadReplyRealtimeUpdate(note,update){
     const touchedNotes=new Set();
     threadReplyRealtimeQueue.forEach(({note:targetNote,update:item})=>{
       const replies=targetNote.replies||(targetNote.replies=[]);
+      const mutationIndex=item.data.client_mutation_id
+        ?replies.findIndex(reply=>reply._clientMutationId===item.data.client_mutation_id)
+        :-1;
       const index=replies.findIndex(reply=>reply.id===item.data.id);
       const previousCommit=index>=0?replies[index]._realtimeCommitTimestamp:null;
       if(previousCommit&&item.commitTimestamp&&previousCommit>item.commitTimestamp)return;
@@ -1014,6 +1098,7 @@ function queueThreadReplyRealtimeUpdate(note,update){
       }else{
         const next={...item.data,_realtimeCommitTimestamp:item.commitTimestamp||previousCommit||null};
         if(index>=0)replies[index]={...replies[index],...next};
+        else if(mutationIndex>=0)replies[mutationIndex]={...replies[mutationIndex],...next,_pending:false,_failed:false};
         else replies.push(next);
       }
       touchedNotes.add(targetNote);
@@ -1135,38 +1220,15 @@ async function openThreadModal(cluster){
     const temporaryReply={
       id:temporaryId,note_id:currentNote.id,author_id:currentUserId(),content:text,
       status:'active',created_at:new Date().toISOString(),upvote_count:0,downvote_count:0,
-      userVote:null,public_display_name:authManager.getCurrentUser?.()?.public_display_name||'我',_pending:true
+      userVote:null,public_display_name:authManager.getCurrentUser?.()?.public_display_name||'我',
+      _pending:true,_failed:false,_clientMutationId:mutationId
     };
     if(!currentNote.replies)currentNote.replies=[];
     currentNote.replies.push(temporaryReply);
     currentNote.reply_count=(Number(currentNote.reply_count)||0)+1;
     $('#thread-reply-text').value='';
     renderThreadContent(currentNote);
-    try{
-      submitButton.disabled=true;
-      const result=await api.addReply(currentNote.id,text,null,mutationId);
-      const temporaryIndex=currentNote.replies.findIndex(reply=>reply.id===temporaryId);
-      const existingIndex=result.reply?currentNote.replies.findIndex(reply=>reply.id===result.reply.id):-1;
-      if(temporaryIndex>=0){
-        if(existingIndex>=0&&existingIndex!==temporaryIndex)currentNote.replies.splice(temporaryIndex,1);
-        else if(result.reply)currentNote.replies.splice(temporaryIndex,1,result.reply);
-      }else if(result.reply&&existingIndex<0){
-        currentNote.replies.push(result.reply);
-      }
-      cacheThreadReplies(currentNote);
-      renderThreadContent(currentNote);
-      toast('回覆成功');
-    }catch(err){
-      console.error('回覆失敗:',err);
-      currentNote.replies=currentNote.replies.filter(reply=>reply.id!==temporaryId);
-      currentNote.reply_count=Math.max(0,(Number(currentNote.reply_count)||1)-1);
-      $('#thread-reply-text').value=text;
-      cacheThreadReplies(currentNote);
-      renderThreadContent(currentNote);
-      toast('回覆失敗');
-    }finally{
-      submitButton.disabled=false;
-    }
+    await sendThreadReply(currentNote,temporaryReply,submitButton);
   };
   
   $('#thread-reply-cancel').onclick=()=>$('#thread-reply-text').value='';
@@ -1212,7 +1274,8 @@ function renderThreadContent(note){
           <span style="color:#999;font-size:0.85rem"> &middot; ${new Date(r.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
-          ${r._pending?'<span style="color:#888;font-size:0.8rem">送出中</span>':`
+          ${r._pending?'<span style="color:#888;font-size:0.8rem">送出中</span>':r._failed
+            ?`<button class="thread-reply-retry mini-btn" data-reply-id="${r.id}" type="button">重新傳送</button>`:`
           <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" aria-label="讚" aria-pressed="${r.userVote==='up'}" title="讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='up'?'#963b2e':'inherit'}">&#9650; ${r.upvote_count||0}</button>
           <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" aria-label="不讚" aria-pressed="${r.userVote==='down'}" title="不讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='down'?'#963b2e':'inherit'}">&#9660; ${r.downvote_count||0}</button>`}
         </div>
@@ -1250,24 +1313,19 @@ function renderThreadContent(note){
     threadRealtimeNoteId=note.id;
     const refreshReplies=update=>{
       queueThreadReplyRealtimeUpdate(note,update);
-      clearTimeout(threadRefreshTimer);
-      threadRefreshTimer=setTimeout(async()=>{
-        try{
-          const response=await api.getNoteReplies(note.id);
-          note.replies=dedupeById(response.replies||[]);
-          cacheThreadReplies(note);
-          if(window.threadData)renderThreadContent(note);
-        }catch(err){
-          console.warn('Reply refresh failed:',err);
-        }
-      },600);
     };
     threadRealtimeSubscriptionIds.add(realtimeClient.subscribeToReplies(note.id,refreshReplies));
-    // 開啟討論串後立即監聽內容、投票與收藏計數，不必先互動才開始同步。
-    threadRealtimeSubscriptionIds.add(realtimeClient.subscribeToNoteChanges('engagement',note.id,update=>{
-      if(update.data)queueThreadNoteRealtimeUpdate(note,update);
+    threadRealtimeSubscriptionIds.add(realtimeClient.subscribeToNoteActivity(note.id,update=>{
+      if(update.data)queueThreadActivityUpdate(note,update);
     }));
   }
+
+  container.querySelectorAll('.thread-reply-retry').forEach(btn=>{
+    btn.onclick=()=>{
+      const reply=findReplyById(note.replies,btn.dataset.replyId);
+      if(reply)sendThreadReply(note,reply);
+    };
+  });
   
   // 綁定投票事件
   container.querySelectorAll('.thread-vote').forEach(btn=>{
@@ -1289,6 +1347,7 @@ function renderThreadContent(note){
         const result=await api.voteNote(noteId,voteType);
         Object.assign(note, result.note);
         note.userVote=result.userVote??result.note?.userVote??note.userVote;
+        if(result.version)note._activityVersion=Math.max(Number(note._activityVersion)||0,Number(result.version)||0);
         renderThreadContent(note);
 
         toast(voteType==='up'?'已按讚':'已倒讚');
@@ -1322,6 +1381,7 @@ function renderThreadContent(note){
         const result=await api.voteReply(note.id,btn.dataset.replyId,btn.dataset.vote);
         if(result.reply)Object.assign(reply,result.reply);
         reply.userVote=result.userVote??result.reply?.userVote??reply.userVote;
+        if(result.version)note._activityVersion=Math.max(Number(note._activityVersion)||0,Number(result.version)||0);
         renderThreadContent(note);
       }catch(err){
         console.error('留言投票失敗:',err);
@@ -1355,6 +1415,7 @@ function renderThreadContent(note){
         const result=await api.toggleFavorite(noteId);
         Object.assign(note, result.note);
         note.isFavoritedByUser=result.isFavorited??note.isFavoritedByUser;
+        if(result.version)note._activityVersion=Math.max(Number(note._activityVersion)||0,Number(result.version)||0);
         favoritesFetchedAt=0;
         renderThreadContent(note);
 
@@ -1706,25 +1767,25 @@ async function saveDivinationResult(){
   if(!state.currentDivinationResult)return;
   const record=state.currentDivinationResult;
   record.ownerId=currentUserId()||null;
-  if(authManager.isLoggedIn){
-    try{
-      const settingsResponse=await api.getUserSettings();
-      if(settingsResponse.settings?.saveDivinationToCloud){
-        const response=await api.createDivination(
-          record.result.originalHexagram.id,
-          record.question,
-          record.result
-        );
-        record.serverId=response.record.id;
-      }
-    }catch(error){
-      console.warn('無法儲存占卜至雲端:',error);
-    }
-  }
+  const saveToCloud=Boolean($('#settings-save-divinations')?.checked);
   state.divinations.push(record);
   saveDivinations();
   toast('占卜結果已儲存');
   closeDivinationResult();
+  if(authManager.isLoggedIn&&saveToCloud){
+    try{
+      const response=await api.createDivination(
+        record.result.originalHexagram.id,
+        record.question,
+        record.result
+      );
+      record.serverId=response.record.id;
+      saveDivinations();
+    }catch(error){
+      console.warn('無法儲存占卜至雲端:',error);
+      toast('已儲存在瀏覽器，雲端同步失敗');
+    }
+  }
 }
 
 function loadDivinations(){
@@ -1771,12 +1832,21 @@ async function submitEditDivination(event){
     }
     if(record.serverId){
       if(!authManager.isLoggedIn){toast('身分驗證失敗：請先登入目前瀏覽器的帳號');return;}
+      const previousQuestion=record.question;
+      record.question=question;
+      saveDivinations();
+      renderDivinations();
+      closeEditDivinationModal();
+      toast('占卜紀錄已更新');
       try{
         await api.updateDivination(record.serverId,question,record.result);
       }catch(err){
+        record.question=previousQuestion;
+        saveDivinations();
+        renderDivinations();
         toast(err.message||'更新占卜紀錄失敗');
-        return;
       }
+      return;
     }
     record.question=question;
     saveDivinations();
@@ -2495,8 +2565,6 @@ function handleNotificationRealtimeUpdate(update){
     notificationFetchedAt=Date.now();
     notificationCache.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     renderNotificationCache();
-    clearTimeout(notificationStatsTimer);
-    notificationStatsTimer=setTimeout(()=>loadUserStats(),120);
   });
 }
 

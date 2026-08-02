@@ -66,6 +66,13 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
 
     const { reply: replyRepo, notification: notificationRepo, note: noteRepo } = req.app.locals.repositories;
 
+    const atomicResult=await replyRepo.addReplyAtomic(
+      req.params.noteId,req.user.userId,content,parentReplyId,clientMutationId
+    );
+    if(atomicResult){
+      return res.status(201).json(atomicResult);
+    }
+
     // 獲取註記信息
     const note = await noteRepo.findById(req.params.noteId);
     if (!note) {
@@ -82,6 +89,10 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
       });
     }
 
+    const shouldNotifyPromise=note.visibility==='public'&&note.author_id!==req.user.userId
+      ? notificationRepo.shouldNotifyUser(note.author_id)
+      : Promise.resolve(false);
+
     // 添加回覆
     const replyId = await replyRepo.addReply(
       req.params.noteId,
@@ -91,13 +102,13 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
       clientMutationId
     );
 
-    const notificationTask=note.visibility==='public'&&note.author_id!==req.user.userId
-      ? notificationRepo.shouldNotifyUser(note.author_id).then(shouldNotify=>{
+    const notificationTask=shouldNotifyPromise.then(shouldNotify=>{
           if(!shouldNotify)return null;
           const deepLink=`/#${note.article_id}?note_id=${note.id}&reply_id=${replyId}`;
-          return notificationRepo.createReplyNotification(note.author_id,replyId,req.user.userId,note.id,deepLink);
-        })
-      : Promise.resolve(null);
+          return notificationRepo.createReplyNotification(
+            note.author_id,replyId,req.user.userId,note,deepLink,req.userInfo?.public_display_name
+          );
+        });
     const [reply]=await Promise.all([replyRepo.findById(replyId),notificationTask]);
 
     res.status(201).json({
@@ -105,6 +116,9 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
       reply
     });
   } catch (error) {
+    if(error.message?.includes('IDENTITY_VERIFICATION_FAILED')){
+      return res.status(403).json({error:'IDENTITY_VERIFICATION_FAILED',message:'身分驗證失敗：無權回覆此註記'});
+    }
     console.error('Create reply error:', error);
     res.status(500).json({
       error: 'CREATE_REPLY_FAILED',
@@ -128,6 +142,12 @@ router.post('/:noteId/replies/:replyId/vote', requireAuth, async (req, res) => {
     }
 
     const { reply: replyRepo, note: noteRepo } = req.app.locals.repositories;
+    const atomicResult=await replyRepo.voteReplyAtomic(
+      req.params.noteId,req.params.replyId,req.user.userId,voteType
+    );
+    if(atomicResult){
+      return res.json(atomicResult);
+    }
     const [note,reply]=await Promise.all([
       noteRepo.findById(req.params.noteId),
       replyRepo.findById(req.params.replyId)
@@ -149,6 +169,9 @@ router.post('/:noteId/replies/:replyId/vote', requireAuth, async (req, res) => {
     const updatedReply={...reply,...result};
     res.json({success:true,reply:updatedReply,userVote:result.userVote});
   } catch (error) {
+    if(error.message?.includes('IDENTITY_VERIFICATION_FAILED')){
+      return res.status(403).json({error:'IDENTITY_VERIFICATION_FAILED',message:'身分驗證失敗：無權對此留言投票'});
+    }
     console.error('Vote reply error:', error);
     res.status(500).json({
       error: 'REPLY_VOTE_FAILED',
