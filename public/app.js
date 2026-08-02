@@ -1275,18 +1275,25 @@ function renderThreadContent(note){
       
       const noteId=btn.dataset.noteId;
       const voteType=btn.dataset.vote;
-      
+      const actionKey=`note-vote:${noteId}`;
+      if(pendingEngagementActions.has(actionKey))return;
+      const snapshot=applyOptimisticVote(note,voteType);
+      pendingEngagementActions.add(actionKey);
+      renderThreadContent(note);
       try{
         const result=await api.voteNote(noteId,voteType);
-        
-        // 更新 note 對象的投票計數
         Object.assign(note, result.note);
+        note.userVote=result.userVote??result.note?.userVote??note.userVote;
         renderThreadContent(note);
 
         toast(voteType==='up'?'已按讚':'已倒讚');
       }catch(err){
         console.error('投票失敗:',err);
+        Object.assign(note,snapshot);
+        renderThreadContent(note);
         toast('投票失敗');
+      }finally{
+        pendingEngagementActions.delete(actionKey);
       }
     };
   });
@@ -1299,14 +1306,25 @@ function renderThreadContent(note){
         return;
       }
 
+      const reply=flattenReplies(note.replies||[]).find(item=>item.id===btn.dataset.replyId);
+      if(!reply)return;
+      const actionKey=`reply-vote:${reply.id}`;
+      if(pendingEngagementActions.has(actionKey))return;
+      const snapshot=applyOptimisticVote(reply,btn.dataset.vote);
+      pendingEngagementActions.add(actionKey);
+      renderThreadContent(note);
       try{
         const result=await api.voteReply(note.id,btn.dataset.replyId,btn.dataset.vote);
-        const reply=(note.replies||[]).find(item=>item.id===btn.dataset.replyId);
-        if(reply&&result.reply)Object.assign(reply,result.reply);
+        if(result.reply)Object.assign(reply,result.reply);
+        reply.userVote=result.userVote??result.reply?.userVote??reply.userVote;
         renderThreadContent(note);
       }catch(err){
         console.error('留言投票失敗:',err);
+        Object.assign(reply,snapshot);
+        renderThreadContent(note);
         toast(err.message||'留言投票失敗');
+      }finally{
+        pendingEngagementActions.delete(actionKey);
       }
     };
   });
@@ -1321,18 +1339,28 @@ function renderThreadContent(note){
       }
       
       const noteId=btn.dataset.noteId;
-      
+      const actionKey=`favorite:${noteId}`;
+      if(pendingEngagementActions.has(actionKey))return;
+      const snapshot={favorite_count:Number(note.favorite_count)||0,isFavoritedByUser:Boolean(note.isFavoritedByUser)};
+      note.isFavoritedByUser=!snapshot.isFavoritedByUser;
+      note.favorite_count=Math.max(0,snapshot.favorite_count+(note.isFavoritedByUser?1:-1));
+      pendingEngagementActions.add(actionKey);
+      renderThreadContent(note);
       try{
         const result=await api.toggleFavorite(noteId);
-        
-        // 更新 note 對象的收藏計數
         Object.assign(note, result.note);
+        note.isFavoritedByUser=result.isFavorited??note.isFavoritedByUser;
+        favoritesFetchedAt=0;
         renderThreadContent(note);
 
         toast('已收藏');
       }catch(err){
         console.error('收藏失敗:',err);
+        Object.assign(note,snapshot);
+        renderThreadContent(note);
         toast('收藏失敗');
+      }finally{
+        pendingEngagementActions.delete(actionKey);
       }
     };
   });
