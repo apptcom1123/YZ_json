@@ -1,4 +1,5 @@
 import { BaseRepository } from './BaseRepository.js';
+import { publicUserCode } from '../utils/publicUserCode.js';
 
 export class NoteReplyRepository extends BaseRepository {
   constructor(db) {
@@ -112,7 +113,8 @@ export class NoteReplyRepository extends BaseRepository {
       }
       return this.buildReplyTree(replies.map(reply=>({
         ...reply,
-        public_display_name:displayNames.get(reply.author_id)||null
+        public_display_name:displayNames.get(reply.author_id)||null,
+        public_user_code:publicUserCode(reply.author_id)
       })));
     }
 

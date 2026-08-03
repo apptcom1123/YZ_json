@@ -55,6 +55,7 @@ let realtimeReconcileTimer=null;
 const threadRepliesCache=new Map();
 const threadPrefetchQueue=new Map();
 const authorDisplayNameCache=new Map();
+const authorPublicCodeCache=new Map();
 const authorDisplayNameRequests=new Map();
 const authorDisplayNameFailures=new Map();
 const THREAD_REPLIES_CACHE_TTL=60000;
@@ -1432,6 +1433,7 @@ async function openThreadModal(cluster){
       id:temporaryId,note_id:currentNote.id,author_id:currentUserId(),content:text,
       status:'active',created_at:new Date().toISOString(),upvote_count:0,downvote_count:0,
       userVote:null,public_display_name:authManager.getCurrentUser?.()?.displayName||'我',
+      public_user_code:authManager.getCurrentUser?.()?.publicCode||null,
       _pending:true,_failed:false,_justInserted:true,_clientMutationId:mutationId
     };
     if(!currentNote.replies)currentNote.replies=[];
@@ -1451,6 +1453,12 @@ function rememberAuthorDisplayName(target){
   return name;
 }
 
+function rememberAuthorPublicCode(target){
+  const code=String(target?.public_user_code||target?.publicCode||'').trim();
+  if(code&&target?.author_id)authorPublicCodeCache.set(target.author_id,code);
+  return code;
+}
+
 function threadAuthorDisplayName(target){
   const user=authManager.getCurrentUser?.();
   if(target?.author_id&&target.author_id===user?.id){
@@ -1460,6 +1468,15 @@ function threadAuthorDisplayName(target){
   const direct=rememberAuthorDisplayName(target);
   if(direct)return direct;
   return authorDisplayNameCache.get(target?.author_id)||'暱稱讀取中';
+}
+
+function threadAuthorPublicCode(target){
+  const user=authManager.getCurrentUser?.();
+  if(target?.author_id&&target.author_id===user?.id&&user.publicCode){
+    authorPublicCodeCache.set(user.id,user.publicCode);
+    return user.publicCode;
+  }
+  return rememberAuthorPublicCode(target)||authorPublicCodeCache.get(target?.author_id)||'識別碼讀取中';
 }
 
 function scheduleThreadAuthorNameRender(){
@@ -1476,10 +1493,14 @@ function hydrateThreadAuthorNames(note){
   const targets=[{value:note,type:'note'},...flattenReplies(note.replies||[]).map(value=>({value,type:'reply'}))];
   targets.forEach(({value,type})=>{
     const authorId=value?.author_id;
-    if(!authorId||rememberAuthorDisplayName(value)||authorDisplayNameCache.has(authorId))return;
+    if(!authorId)return;
+    const hasName=Boolean(rememberAuthorDisplayName(value)||authorDisplayNameCache.has(authorId));
+    const hasCode=Boolean(rememberAuthorPublicCode(value)||authorPublicCodeCache.has(authorId));
+    if(hasName&&hasCode)return;
     const ownUser=authManager.getCurrentUser?.();
-    if(authorId===ownUser?.id&&ownUser.displayName){
+    if(authorId===ownUser?.id&&ownUser.displayName&&ownUser.publicCode){
       authorDisplayNameCache.set(authorId,ownUser.displayName);
+      authorPublicCodeCache.set(authorId,ownUser.publicCode);
       return;
     }
     if(authorDisplayNameRequests.has(authorId)||Date.now()-(authorDisplayNameFailures.get(authorId)||0)<30000)return;
@@ -1488,7 +1509,10 @@ function hydrateThreadAuthorNames(note){
       :api.getReplyAuthor(note.id,value.id)
     ).then(response=>{
       const name=String(response?.public_display_name||response?.publicDisplayName||'').trim();
-      if(name){authorDisplayNameCache.set(authorId,name);scheduleThreadAuthorNameRender();}
+      const code=String(response?.public_user_code||response?.publicCode||'').trim();
+      if(name)authorDisplayNameCache.set(authorId,name);
+      if(code)authorPublicCodeCache.set(authorId,code);
+      if(name||code)scheduleThreadAuthorNameRender();
     }).catch(error=>{
       authorDisplayNameFailures.set(authorId,Date.now());
       console.warn('Thread author name refresh failed:',error);
@@ -1512,7 +1536,7 @@ function renderThreadContent(note){
     <div class="thread-note" style="padding:12px;border-bottom:1px solid #ddd">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
-          <strong style="color:#333">${esc(threadAuthorDisplayName(note))}</strong>
+          <strong style="color:#333">${esc(threadAuthorDisplayName(note))}</strong><span class="thread-author-code">${esc(threadAuthorPublicCode(note))}</span>
           <span style="color:#999;font-size:0.85rem"> · ${new Date(note.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
@@ -1536,7 +1560,7 @@ function renderThreadContent(note){
     <div class="thread-reply${r._justInserted?' thread-reply-enter':''}" data-reply-id="${r.id}" style="padding-left:${Math.min(88,32+(r._depth||0)*18)}px">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
-          <strong style="color:#555">${esc(threadAuthorDisplayName(r))}</strong>
+          <strong style="color:#555">${esc(threadAuthorDisplayName(r))}</strong><span class="thread-author-code">${esc(threadAuthorPublicCode(r))}</span>
           <span style="color:#999;font-size:0.85rem"> &middot; ${new Date(r.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
@@ -2711,7 +2735,7 @@ function renderFavoritesCache(){
       <div class="favorite-card" data-note-id="${esc(note.id)}" style="padding:12px;border:1px solid #ddd;border-radius:4px;margin-bottom:8px;cursor:pointer;transition:all 0.2s;background:#fff" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'" onmouseout="this.style.boxShadow='none'" onclick="navigateToFavorite('${esc(note.id)}','${esc(note.article_id)}')">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
           <div>
-            <strong style="color:#333">${esc(threadAuthorDisplayName(note))}</strong>
+            <strong style="color:#333">${esc(threadAuthorDisplayName(note))}</strong><span class="thread-author-code">${esc(threadAuthorPublicCode(note))}</span>
             <span style="color:#999;font-size:0.85rem"> · ${new Date(note.created_at).toLocaleDateString('zh-TW')}</span>
           </div>
           <div style="text-align:right;font-size:0.85rem;color:#888">

@@ -126,7 +126,7 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     // 創建註記
-    const note = await noteRepo.createNote({
+    const createdNote = await noteRepo.createNote({
       authorId: req.user.userId,
       articleType,
       articleId,
@@ -137,6 +137,7 @@ router.post('/', requireAuth, async (req, res) => {
       visibility,
       localUuid
     });
+    const [note]=await noteRepo.attachAuthorDisplayNames([createdNote]);
 
     res.status(201).json({
       success: true,

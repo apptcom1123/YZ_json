@@ -1,5 +1,6 @@
 import { BaseRepository } from './BaseRepository.js';
 import crypto from 'crypto';
+import { publicUserCode } from '../utils/publicUserCode.js';
 
 const PUBLIC_NOTE_RANK_WINDOW = 20;
 
@@ -18,12 +19,16 @@ export class NoteRepository extends BaseRepository {
       .in('id',authorIds);
     if(error){
       console.warn('Note author lookup failed:',error.message);
-      return rows;
+      return rows.map(note=>({...note,public_user_code:publicUserCode(note.author_id)}));
     }
     const names=new Map((users||[]).map(user=>[
       user.id,user.public_display_name||user.display_name||null
     ]));
-    return rows.map(note=>({...note,public_display_name:names.get(note.author_id)||null}));
+    return rows.map(note=>({
+      ...note,
+      public_display_name:names.get(note.author_id)||null,
+      public_user_code:publicUserCode(note.author_id)
+    }));
   }
 
   applyVisibilityThreshold(notes, thresholdPercent = 50) {

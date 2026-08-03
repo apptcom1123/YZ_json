@@ -4,6 +4,7 @@
 
 import express from 'express';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
+import { publicUserCode } from '../utils/publicUserCode.js';
 
 const router = express.Router();
 
@@ -74,6 +75,7 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
       req.params.noteId,req.user.userId,content,parentReplyId,clientMutationId
     );
     if(atomicResult){
+      if(atomicResult.reply)atomicResult.reply.public_user_code=publicUserCode(req.user.userId);
       return res.status(201).json(atomicResult);
     }
 
@@ -113,7 +115,12 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
             note.author_id,replyId,req.user.userId,note,deepLink,req.userInfo?.public_display_name
           );
         });
-    const [reply]=await Promise.all([replyRepo.findById(replyId),notificationTask]);
+    const [storedReply]=await Promise.all([replyRepo.findById(replyId),notificationTask]);
+    const reply={
+      ...storedReply,
+      public_display_name:req.userInfo?.public_display_name||req.userInfo?.display_name||null,
+      public_user_code:publicUserCode(req.user.userId)
+    };
 
     res.status(201).json({
       success: true,
@@ -145,7 +152,11 @@ router.get('/:noteId/replies/:replyId/author', optionalAuth, async (req,res)=>{
     const author=await userRepo.findById(reply.author_id);
     if(!author)return res.status(404).json({error:'USER_NOT_FOUND',message:'找不到作者'});
     res.set('Cache-Control',note.visibility==='public'?'public, max-age=300':'private, no-store');
-    res.json({authorId:author.id,publicDisplayName:author.public_display_name||author.display_name});
+    res.json({
+      authorId:author.id,
+      publicDisplayName:author.public_display_name||author.display_name,
+      publicCode:publicUserCode(author.id)
+    });
   }catch(error){
     console.error('Get reply author error:',error);
     res.status(500).json({error:'FETCH_REPLY_AUTHOR_FAILED',message:'無法取得作者暱稱'});

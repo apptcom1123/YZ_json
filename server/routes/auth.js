@@ -1,5 +1,6 @@
 import express from 'express';
 import { requireSession } from '../middleware/auth.js';
+import { publicUserCode } from '../utils/publicUserCode.js';
 
 const router = express.Router();
 
@@ -36,6 +37,7 @@ router.get('/status', async (req, res, next) => {
         id: user.id,
         email: user.email,
         displayName: user.display_name,
+        publicCode: publicUserCode(user.id),
         avatarUrl: user.avatar_url,
         role: user.role
       }
