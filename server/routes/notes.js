@@ -158,7 +158,8 @@ router.post('/', requireAuth, async (req, res) => {
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const {note:noteRepo}=req.app.locals.repositories;
-    const note=await noteRepo.findById(req.params.id);
+    const rawNote=await noteRepo.findById(req.params.id);
+    const [note]=rawNote?await noteRepo.attachAuthorDisplayNames([rawNote]):[null];
 
     if (!note) {
       return res.status(404).json({

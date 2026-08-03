@@ -8,6 +8,24 @@ export class NoteRepository extends BaseRepository {
     super(db, 'notes');
   }
 
+  async attachAuthorDisplayNames(notes) {
+    const rows=notes||[];
+    const authorIds=[...new Set(rows.map(note=>note.author_id).filter(Boolean))];
+    if(!authorIds.length)return rows;
+    const {data:users,error}=await this.db
+      .from('users')
+      .select('id,display_name,public_display_name')
+      .in('id',authorIds);
+    if(error){
+      console.warn('Note author lookup failed:',error.message);
+      return rows;
+    }
+    const names=new Map((users||[]).map(user=>[
+      user.id,user.public_display_name||user.display_name||null
+    ]));
+    return rows.map(note=>({...note,public_display_name:names.get(note.author_id)||null}));
+  }
+
   applyVisibilityThreshold(notes, thresholdPercent = 50) {
     const percent = Math.min(100, Math.max(0, Number(thresholdPercent) || 0));
     if (percent <= 0) return notes || [];
@@ -147,7 +165,7 @@ export class NoteRepository extends BaseRepository {
         .order('score', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return this.applyVisibilityThreshold(data || [], thresholdPercent);
+      return this.applyVisibilityThreshold(await this.attachAuthorDisplayNames(data || []), thresholdPercent);
     }
 
     const query = `
@@ -215,7 +233,7 @@ export class NoteRepository extends BaseRepository {
         .order('score', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return this.applyVisibilityThreshold(data || [], thresholdPercent);
+      return this.applyVisibilityThreshold(await this.attachAuthorDisplayNames(data || []), thresholdPercent);
     }
 
     return this.applyVisibilityThreshold(await this.db.all(`
@@ -649,7 +667,7 @@ export class NoteRepository extends BaseRepository {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data || []).map(item => item.notes).filter(Boolean);
+      return this.attachAuthorDisplayNames((data || []).map(item => item.notes).filter(Boolean));
     }
 
     const query = `

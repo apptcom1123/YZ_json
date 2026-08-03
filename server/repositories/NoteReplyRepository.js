@@ -105,10 +105,10 @@ export class NoteReplyRepository extends BaseRepository {
       if(authorIds.length){
         const {data:users,error:usersError}=await this.db
           .from('users')
-          .select('id,public_display_name')
+          .select('id,display_name,public_display_name')
           .in('id',authorIds);
         if(usersError)console.warn('Reply author lookup failed:',usersError.message);
-        else displayNames=new Map((users||[]).map(user=>[user.id,user.public_display_name]));
+        else displayNames=new Map((users||[]).map(user=>[user.id,user.public_display_name||user.display_name]));
       }
       return this.buildReplyTree(replies.map(reply=>({
         ...reply,

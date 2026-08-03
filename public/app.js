@@ -54,6 +54,9 @@ let threadNoteRenderFrame=null;
 let realtimeReconcileTimer=null;
 const threadRepliesCache=new Map();
 const threadPrefetchQueue=new Map();
+const authorDisplayNameCache=new Map();
+const authorDisplayNameRequests=new Map();
+const authorDisplayNameFailures=new Map();
 const THREAD_REPLIES_CACHE_TTL=60000;
 const THREAD_REPLIES_CACHE_LIMIT=30;
 let threadPrefetchScheduled=false;
@@ -316,6 +319,7 @@ function bindUI(){
       const previousNickname=user.displayName;
       const renderNickname=name=>{
         user.displayName=name;
+        authorDisplayNameCache.set(user.id,name);
         if($('#user-nickname'))$('#user-nickname').textContent=name;
         if($('#user-menu-toggle')){
           $('#user-menu-toggle').textContent=name.trim().slice(0,1).toUpperCase()||'●';
@@ -397,7 +401,7 @@ async function renderText(id){
 }
 
 function renderAbout(){
-  reader.innerHTML=`<article class="text-page annotatable" data-doc="text-about"><header><p class="text-kicker">使 用 說 明</p><h1>網站介紹</h1></header><div class="about-grid"><section class="feature-card"><h2>六十四卦查閱</h2><p>從左上角目錄開啟六十四卦索引，可依卦名、卦序、卦辭、爻辭或詩訣搜尋。</p></section><section class="feature-card"><h2>易傳獨立閱讀</h2><p>文言、繫辭、說卦、序卦、雜卦與彖象合參皆整理為獨立文字頁。</p></section><section class="feature-card"><h2>本機螢光筆註解</h2><ol class="steps"><li>反白想記錄的內文。</li><li>點擊畫面下方「加入螢光筆註解」。</li><li>在視窗選擇「私人」或「公開」，輸入心得後送出。</li><li>私人註解只會存在您的裝置，公開註解會與其他使用者分享。</li><li>長按內文旁的小泡泡可快速查看；雙擊泡泡可重新編輯。</li></ol></section><section class="feature-card"><h2>社群功能</h2><ol class="steps"><li>當您設定註解為「公開」時，其他登入使用者可以看到您的匿名註解。</li><li>相同位置的公開註解會自動聚合成小氣泡，您可長按顯示內容，或雙擊查看討論串。</li><li>在討論串內，您可以按讚、倒讚或收藏他人的公開註解。</li><li>投票結果（按讚/倒讚）會決定註解的排序與可見性。</li></ol></section><section class="feature-card"><h2>易經占卜</h2><ol class="steps"><li>點擊螢幕右下方的「占」按鈕。</li><li>輸入你的提問或所求。</li><li>系統將使用古法蓍草演卦生成結果。</li><li>結果會顯示本卦、變爻與之卦。</li><li>可將占卜結果儲存，方便日後查閱。</li></ol></section></div><div class="privacy-note"><strong>隱私說明</strong><br><strong>私人註解：</strong>只存放在目前瀏覽器的 localStorage，不會上傳到伺服器。清除網站資料、換瀏覽器或換裝置時，資料不會自動保留。<br><br><strong>公開註解：</strong>儲存在伺服器上與其他使用者分享。您的姓名不會顯示；系統會根據用戶ID與文章生成一致的「匿名使用者 XXXX」代碼。投票與收藏記錄僅記錄投票狀態，不涉及個人隱私。</div></article>`;
+  reader.innerHTML=`<article class="text-page annotatable" data-doc="text-about"><header><p class="text-kicker">使 用 說 明</p><h1>網站介紹</h1></header><div class="about-grid"><section class="feature-card"><h2>六十四卦查閱</h2><p>從左上角目錄開啟六十四卦索引，可依卦名、卦序、卦辭、爻辭或詩訣搜尋。</p></section><section class="feature-card"><h2>易傳獨立閱讀</h2><p>文言、繫辭、說卦、序卦、雜卦與彖象合參皆整理為獨立文字頁。</p></section><section class="feature-card"><h2>本機螢光筆註解</h2><ol class="steps"><li>反白想記錄的內文。</li><li>點擊畫面下方「加入螢光筆註解」。</li><li>在視窗選擇「私人」或「公開」，輸入心得後送出。</li><li>私人註解只會存在您的裝置，公開註解會與其他使用者分享。</li><li>長按內文旁的小泡泡可快速查看；雙擊泡泡可重新編輯。</li></ol></section><section class="feature-card"><h2>社群功能</h2><ol class="steps"><li>當您設定註解為「公開」時，其他登入使用者可以看到您的匿名註解。</li><li>相同位置的公開註解會自動聚合成小氣泡，您可長按顯示內容，或雙擊查看討論串。</li><li>在討論串內，您可以按讚、倒讚或收藏他人的公開註解。</li><li>投票結果（按讚/倒讚）會決定註解的排序與可見性。</li></ol></section><section class="feature-card"><h2>易經占卜</h2><ol class="steps"><li>點擊螢幕右下方的「占」按鈕。</li><li>輸入你的提問或所求。</li><li>系統將使用古法蓍草演卦生成結果。</li><li>結果會顯示本卦、變爻與之卦。</li><li>可將占卜結果儲存，方便日後查閱。</li></ol></section></div><div class="privacy-note"><strong>隱私說明</strong><br><strong>私人註解：</strong>只存放在目前瀏覽器的 localStorage，不會上傳到伺服器。清除網站資料、換瀏覽器或換裝置時，資料不會自動保留。<br><br><strong>公開註解：</strong>使用者在設定中同意相關行為後，資料始能儲存在伺服器上與其他使用者分享，支援跨裝置使用。</div></article>`; 
   applyHighlights();
 }
 
@@ -1427,7 +1431,7 @@ async function openThreadModal(cluster){
     const temporaryReply={
       id:temporaryId,note_id:currentNote.id,author_id:currentUserId(),content:text,
       status:'active',created_at:new Date().toISOString(),upvote_count:0,downvote_count:0,
-      userVote:null,public_display_name:authManager.getCurrentUser?.()?.public_display_name||'我',
+      userVote:null,public_display_name:authManager.getCurrentUser?.()?.displayName||'我',
       _pending:true,_failed:false,_justInserted:true,_clientMutationId:mutationId
     };
     if(!currentNote.replies)currentNote.replies=[];
@@ -1441,12 +1445,65 @@ async function openThreadModal(cluster){
   $('#thread-reply-cancel').onclick=()=>$('#thread-reply-text').value='';
 }
 
+function rememberAuthorDisplayName(target){
+  const name=String(target?.public_display_name||target?.publicDisplayName||'').trim();
+  if(name&&target?.author_id)authorDisplayNameCache.set(target.author_id,name);
+  return name;
+}
+
+function threadAuthorDisplayName(target){
+  const user=authManager.getCurrentUser?.();
+  if(target?.author_id&&target.author_id===user?.id){
+    const ownName=String(user.displayName||'').trim();
+    if(ownName){authorDisplayNameCache.set(user.id,ownName);return ownName;}
+  }
+  const direct=rememberAuthorDisplayName(target);
+  if(direct)return direct;
+  return authorDisplayNameCache.get(target?.author_id)||'暱稱讀取中';
+}
+
+function scheduleThreadAuthorNameRender(){
+  if(scheduleThreadAuthorNameRender.frame)return;
+  scheduleThreadAuthorNameRender.frame=requestAnimationFrame(()=>{
+    scheduleThreadAuthorNameRender.frame=null;
+    const thread=window.threadData;
+    const current=thread?.cluster?.[thread.currentIndex]?.note;
+    if(current)renderThreadContent(current);
+  });
+}
+
+function hydrateThreadAuthorNames(note){
+  const targets=[{value:note,type:'note'},...flattenReplies(note.replies||[]).map(value=>({value,type:'reply'}))];
+  targets.forEach(({value,type})=>{
+    const authorId=value?.author_id;
+    if(!authorId||rememberAuthorDisplayName(value)||authorDisplayNameCache.has(authorId))return;
+    const ownUser=authManager.getCurrentUser?.();
+    if(authorId===ownUser?.id&&ownUser.displayName){
+      authorDisplayNameCache.set(authorId,ownUser.displayName);
+      return;
+    }
+    if(authorDisplayNameRequests.has(authorId)||Date.now()-(authorDisplayNameFailures.get(authorId)||0)<30000)return;
+    const request=(type==='note'
+      ?api.getNote(value.id).then(response=>response?.note||response)
+      :api.getReplyAuthor(note.id,value.id)
+    ).then(response=>{
+      const name=String(response?.public_display_name||response?.publicDisplayName||'').trim();
+      if(name){authorDisplayNameCache.set(authorId,name);scheduleThreadAuthorNameRender();}
+    }).catch(error=>{
+      authorDisplayNameFailures.set(authorId,Date.now());
+      console.warn('Thread author name refresh failed:',error);
+    }).finally(()=>authorDisplayNameRequests.delete(authorId));
+    authorDisplayNameRequests.set(authorId,request);
+  });
+}
+
 function renderThreadContent(note){
   const container=$('#thread-content');
   const counter=$('#thread-counter');
   const {cluster,currentIndex}=window.threadData||{};
   
   if(!cluster)return;
+  hydrateThreadAuthorNames(note);
   counter.textContent=`${currentIndex+1}/${cluster.length}`;
   const canEditNote=authManager.isLoggedIn&&note.author_id===currentUserId();
   
@@ -1455,7 +1512,7 @@ function renderThreadContent(note){
     <div class="thread-note" style="padding:12px;border-bottom:1px solid #ddd">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
-          <strong style="color:#333">${esc(note.public_alias||'匿名使用者')}</strong>
+          <strong style="color:#333">${esc(threadAuthorDisplayName(note))}</strong>
           <span style="color:#999;font-size:0.85rem"> · ${new Date(note.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
@@ -1479,7 +1536,7 @@ function renderThreadContent(note){
     <div class="thread-reply${r._justInserted?' thread-reply-enter':''}" data-reply-id="${r.id}" style="padding-left:${Math.min(88,32+(r._depth||0)*18)}px">
       <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
         <div>
-          <strong style="color:#555">${esc(r.public_display_name||r.public_alias||'\u533f\u540d\u4f7f\u7528\u8005')}</strong>
+          <strong style="color:#555">${esc(threadAuthorDisplayName(r))}</strong>
           <span style="color:#999;font-size:0.85rem"> &middot; ${new Date(r.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
@@ -2654,7 +2711,7 @@ function renderFavoritesCache(){
       <div class="favorite-card" data-note-id="${esc(note.id)}" style="padding:12px;border:1px solid #ddd;border-radius:4px;margin-bottom:8px;cursor:pointer;transition:all 0.2s;background:#fff" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'" onmouseout="this.style.boxShadow='none'" onclick="navigateToFavorite('${esc(note.id)}','${esc(note.article_id)}')">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
           <div>
-            <strong style="color:#333">${esc(note.public_alias||'匿名使用者')}</strong>
+            <strong style="color:#333">${esc(threadAuthorDisplayName(note))}</strong>
             <span style="color:#999;font-size:0.85rem"> · ${new Date(note.created_at).toLocaleDateString('zh-TW')}</span>
           </div>
           <div style="text-align:right;font-size:0.85rem;color:#888">

@@ -321,6 +321,10 @@ class APIClient {
     return this.get(`/notes/${noteId}/replies`);
   }
 
+  getReplyAuthor(noteId, replyId) {
+    return this.get(`/notes/${noteId}/replies/${replyId}/author`);
+  }
+
   /**
    * 添加回覆
    */

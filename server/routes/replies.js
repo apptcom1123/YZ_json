@@ -131,6 +131,27 @@ router.post('/:noteId/replies', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/:noteId/replies/:replyId/author', optionalAuth, async (req,res)=>{
+  try{
+    const {reply:replyRepo,note:noteRepo,user:userRepo}=req.app.locals.repositories;
+    const [note,reply]=await Promise.all([
+      noteRepo.findById(req.params.noteId),
+      replyRepo.findById(req.params.replyId)
+    ]);
+    if(!note||!reply||reply.note_id!==note.id||reply.status!=='active'||
+      (note.visibility!=='public'&&note.author_id!==req.user?.userId)){
+      return res.status(404).json({error:'REPLY_NOT_FOUND',message:'找不到回覆'});
+    }
+    const author=await userRepo.findById(reply.author_id);
+    if(!author)return res.status(404).json({error:'USER_NOT_FOUND',message:'找不到作者'});
+    res.set('Cache-Control',note.visibility==='public'?'public, max-age=300':'private, no-store');
+    res.json({authorId:author.id,publicDisplayName:author.public_display_name||author.display_name});
+  }catch(error){
+    console.error('Get reply author error:',error);
+    res.status(500).json({error:'FETCH_REPLY_AUTHOR_FAILED',message:'無法取得作者暱稱'});
+  }
+});
+
 /**
  * POST /api/notes/:noteId/replies/:replyId/vote
  * Vote for a reply. The authenticated Supabase user is always the voter.
