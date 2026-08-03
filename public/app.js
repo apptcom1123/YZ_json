@@ -98,6 +98,11 @@ function canAccessLocalDivination(record){
 function localNotesForDocument(doc){
   return state.notes.filter(note=>note.doc===doc&&canAccessLocalNote(note));
 }
+function personalNotesForCurrentViewer(){
+  const userId=currentUserId();
+  if(userId)return state.notes.filter(note=>note.ownerId===userId);
+  return state.notes.filter(note=>!note.ownerId&&!note.serverId);
+}
 
 // 初始化認證系統（在其他 UI 初始化前進行）
 if(typeof authManager !== 'undefined'){
@@ -228,7 +233,12 @@ function bindUI(){
       
       // 根據分頁類型加載內容
       if(tabName==='divinations')renderDivinations();
-      else if(tabName==='highlights')renderNotes();
+      else if(tabName==='highlights'){
+        renderNotes();
+        if(authManager?.isLoggedIn&&typeof refreshOwnCloudNotes==='function'){
+          refreshOwnCloudNotes().catch(error=>console.warn('Own notes refresh failed:',error));
+        }
+      }
       else if(tabName==='favorites')loadFavoritesList();
       else if(tabName==='notifications')loadNotificationsList();
       else if(tabName==='settings')initializeSettings();
@@ -1700,7 +1710,7 @@ function openNotes(){
 }
 function renderNotes(){
   const box=$('#notes-list');
-  const notes=state.notes.filter(canAccessLocalNote);
+  const notes=personalNotesForCurrentViewer();
   if(!notes.length){
     box.innerHTML='<p class="empty">尚未加入螢光筆標記。</p>';
     return;
@@ -1723,9 +1733,9 @@ function renderNotes(){
   box.onclick=async e=>{
     const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');
     
-    if(edit){const note=state.notes.find(n=>n.id===edit.dataset.edit&&canAccessLocalNote(n));if(note)openAnnotationModal(note);}
+    if(edit){const note=personalNotesForCurrentViewer().find(n=>n.id===edit.dataset.edit);if(note)openAnnotationModal(note);}
     if(del){
-      const note=state.notes.find(n=>n.id===del.dataset.delete&&canAccessLocalNote(n));
+      const note=personalNotesForCurrentViewer().find(n=>n.id===del.dataset.delete);
       if(!note){toast('身分驗證失敗：非使用者本人');return;}
       if(note.serverId){
         if(!authManager.isLoggedIn){toast('身分驗證失敗：請先登入目前瀏覽器的帳號');return;}

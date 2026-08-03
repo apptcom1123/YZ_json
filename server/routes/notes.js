@@ -60,8 +60,12 @@ router.get('/', optionalAuth, async (req, res) => {
 
 router.get('/mine', requireAuth, async (req, res) => {
   try {
-    const notes = await req.app.locals.repositories.note.getUserPrivateNotes(req.user.userId);
-    res.json({ notes });
+    const userId=req.user?.userId;
+    if(!userId)return res.status(401).json({error:'IDENTITY_VERIFICATION_FAILED',message:'身分驗證失敗：請重新登入。'});
+    const notes = await req.app.locals.repositories.note.getUserPrivateNotes(userId);
+    res.set('Cache-Control','private, no-store');
+    res.set('Vary','Authorization');
+    res.json({notes:notes.filter(note=>note.author_id===userId)});
   } catch (error) {
     console.error('Get own notes error:', error);
     res.status(500).json({ error: 'FETCH_OWN_NOTES_FAILED' });

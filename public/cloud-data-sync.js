@@ -24,6 +24,44 @@ function indexLocalCloudNotes() {
   return index;
 }
 
+function mergeOwnCloudNotes(remoteNotes) {
+  const userId=authManager.getCurrentUser()?.id;
+  if(!userId)return false;
+  let changed=false;
+  const localByKey=indexLocalCloudNotes();
+  for(const remoteNote of remoteNotes||[]){
+    if(remoteNote.author_id!==userId){
+      console.warn('Ignored a cloud note that did not belong to the authenticated user.');
+      continue;
+    }
+    const local=localByKey.get(String(remoteNote.local_uuid||''))||localByKey.get(String(remoteNote.id));
+    if(!local){
+      const normalized=toLocalCloudNote(remoteNote);
+      state.notes.push(normalized);
+      localByKey.set(String(normalized.id),normalized);
+      localByKey.set(String(normalized.serverId),normalized);
+      changed=true;
+      continue;
+    }
+    const wasChanged=local.serverId!==remoteNote.id||
+      local.ownerId!==userId||
+      local.syncStatus!=='synced'||
+      (!['pending','error','offline'].includes(local.syncStatus)&&local.updatedAt!==remoteNote.updated_at);
+    local.serverId=remoteNote.id;
+    local.ownerId=userId;
+    const hasUnsyncedLocalChanges=['pending','error','offline'].includes(local.syncStatus);
+    if(!hasUnsyncedLocalChanges){
+      local.comment=remoteNote.content;
+      local.visibility=remoteNote.visibility;
+      local.updatedAt=remoteNote.updated_at;
+      local.syncStatus='synced';
+    }
+    local.serverVersion=remoteNote.updated_at;
+    changed=changed||wasChanged;
+  }
+  return changed;
+}
+
 async function syncCloudNote(note) {
   if (!authManager.isLoggedIn || !canAccessLocalNote(note)) return null;
   note.syncStatus = 'pending';
@@ -73,32 +111,7 @@ async function performCloudNotesSync() {
   if (uploadResults.some(result => result.status === 'fulfilled')) changed = pending.length > 0;
 
   const response = await api.getMyNotes();
-  const localByKey = indexLocalCloudNotes();
-  for (const remoteNote of response.notes || []) {
-    const local = localByKey.get(String(remoteNote.local_uuid || '')) || localByKey.get(String(remoteNote.id));
-    if (!local) {
-      const normalized = toLocalCloudNote(remoteNote);
-      state.notes.push(normalized);
-      localByKey.set(String(normalized.id), normalized);
-      localByKey.set(String(normalized.serverId), normalized);
-      changed = true;
-      continue;
-    }
-    const wasChanged = local.serverId !== remoteNote.id ||
-      local.syncStatus !== 'synced' ||
-      (!['pending', 'error', 'offline'].includes(local.syncStatus) && local.updatedAt !== remoteNote.updated_at);
-    local.serverId = remoteNote.id;
-    local.ownerId = remoteNote.author_id;
-    const hasUnsyncedLocalChanges = ['pending', 'error', 'offline'].includes(local.syncStatus);
-    if (!hasUnsyncedLocalChanges) {
-      local.comment = remoteNote.content;
-      local.visibility = remoteNote.visibility;
-      local.updatedAt = remoteNote.updated_at;
-      local.syncStatus = 'synced';
-    }
-    local.serverVersion = remoteNote.updated_at;
-    changed = changed || wasChanged;
-  }
+  changed=mergeOwnCloudNotes(response.notes)||changed;
   saveNotes();
   return { changed };
 }
@@ -110,6 +123,21 @@ function syncCloudNotes() {
     cloudNotesSyncPromise = null;
   });
   return cloudNotesSyncPromise;
+}
+
+let ownCloudNotesRefreshPromise=null;
+function refreshOwnCloudNotes(){
+  if(!authManager.isLoggedIn)return Promise.resolve({changed:false});
+  if(ownCloudNotesRefreshPromise)return ownCloudNotesRefreshPromise;
+  const requestedUserId=authManager.getCurrentUser()?.id;
+  ownCloudNotesRefreshPromise=api.getMyNotes().then(response=>{
+    if(!authManager.isLoggedIn||authManager.getCurrentUser()?.id!==requestedUserId)return {changed:false};
+    const changed=mergeOwnCloudNotes(response.notes);
+    if(changed)saveNotes();
+    renderNotes();
+    return {changed};
+  }).finally(()=>{ownCloudNotesRefreshPromise=null;});
+  return ownCloudNotesRefreshPromise;
 }
 
 function toLocalCloudDivination(record) {
@@ -144,7 +172,8 @@ async function syncCloudDivinations() {
 
 function handlePrivateNoteRealtimeUpdate(update) {
   const remote = update?.data;
-  if (!remote?.id) return;
+  const userId=authManager.getCurrentUser()?.id;
+  if (!remote?.id || !userId || remote.author_id!==userId) return;
   const localIndex = indexLocalCloudNotes();
   const local = localIndex.get(String(remote.local_uuid || '')) || localIndex.get(String(remote.id));
   if (local?._realtimeCommitTimestamp && update.commitTimestamp &&
