@@ -1470,13 +1470,21 @@ function threadAuthorDisplayName(target){
   return authorDisplayNameCache.get(target?.author_id)||'暱稱讀取中';
 }
 
+function formatPublicUserCode(code){
+  const value=String(code||'').replace(/^U-/i,'');
+  return value?`U-${value.slice(0,4).toUpperCase()}`:'識別碼讀取中';
+}
+
 function threadAuthorPublicCode(target){
   const user=authManager.getCurrentUser?.();
+  let code='';
   if(target?.author_id&&target.author_id===user?.id&&user.publicCode){
     authorPublicCodeCache.set(user.id,user.publicCode);
-    return user.publicCode;
+    code=user.publicCode;
+  }else{
+    code=rememberAuthorPublicCode(target)||authorPublicCodeCache.get(target?.author_id)||'';
   }
-  return rememberAuthorPublicCode(target)||authorPublicCodeCache.get(target?.author_id)||'識別碼讀取中';
+  return formatPublicUserCode(code);
 }
 
 function scheduleThreadAuthorNameRender(){
@@ -1540,8 +1548,8 @@ function renderThreadContent(note){
           <span style="color:#999;font-size:0.85rem"> · ${new Date(note.created_at).toLocaleDateString('zh-TW')}</span>
         </div>
         <div style="display:flex;gap:4px;font-size:0.9rem">
-          <button class="thread-vote" data-note-id="${note.id}" data-vote="up" aria-pressed="${note.userVote==='up'}" style="background:none;border:none;cursor:pointer;color:${note.userVote==='up'?'#963b2e':'inherit'}">▲ ${note.upvote_count||0}</button>
-          <button class="thread-vote" data-note-id="${note.id}" data-vote="down" aria-pressed="${note.userVote==='down'}" style="background:none;border:none;cursor:pointer;color:${note.userVote==='down'?'#963b2e':'inherit'}">▼ ${note.downvote_count||0}</button>
+          <button class="thread-vote" data-note-id="${note.id}" data-vote="up" aria-pressed="${note.userVote==='up'}" style="background:none;border:none;cursor:pointer;color:${note.userVote==='up'?'#963b2e':'inherit'}"><span class="thread-vote-symbol">▲</span> ${note.upvote_count||0}</button>
+          <button class="thread-vote" data-note-id="${note.id}" data-vote="down" aria-pressed="${note.userVote==='down'}" style="background:none;border:none;cursor:pointer;color:${note.userVote==='down'?'#963b2e':'inherit'}"><span class="thread-vote-symbol">▼</span> ${note.downvote_count||0}</button>
           <button class="thread-favorite" data-note-id="${note.id}" aria-pressed="${Boolean(note.isFavoritedByUser)}" style="background:none;border:none;cursor:pointer;color:${note.isFavoritedByUser?'#963b2e':'inherit'}">✦ ${note.favorite_count||0}</button>
           ${canEditNote?`<button class="thread-edit-note" type="button" style="background:none;border:none;cursor:pointer">編輯</button>`:''}
         </div>
@@ -1566,8 +1574,8 @@ function renderThreadContent(note){
         <div style="display:flex;gap:4px;font-size:0.9rem">
           ${r._pending?'<span style="color:#888;font-size:0.8rem">送出中</span>':r._failed
             ?`<button class="thread-reply-retry mini-btn" data-reply-id="${r.id}" type="button">重新傳送</button>`:`
-          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" aria-label="讚" aria-pressed="${r.userVote==='up'}" title="讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='up'?'#963b2e':'inherit'}">&#9650; ${r.upvote_count||0}</button>
-          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" aria-label="不讚" aria-pressed="${r.userVote==='down'}" title="不讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='down'?'#963b2e':'inherit'}">&#9660; ${r.downvote_count||0}</button>`}
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="up" aria-label="讚" aria-pressed="${r.userVote==='up'}" title="讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='up'?'#963b2e':'inherit'}"><span class="thread-vote-symbol">&#9650;</span> ${r.upvote_count||0}</button>
+          <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" aria-label="不讚" aria-pressed="${r.userVote==='down'}" title="不讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='down'?'#963b2e':'inherit'}"><span class="thread-vote-symbol">&#9660;</span> ${r.downvote_count||0}</button>`}
         </div>
       </div>
       <p class="thread-message-content" style="color:#666;line-height:1.5;margin:8px 0">${esc(r.content)}</p>
