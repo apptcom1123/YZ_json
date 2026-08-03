@@ -1465,7 +1465,7 @@ function renderThreadContent(note){
           ${canEditNote?`<button class="thread-edit-note" type="button" style="background:none;border:none;cursor:pointer">編輯</button>`:''}
         </div>
       </div>
-      <p style="color:#333;line-height:1.5;margin:8px 0">${esc(note.content)}</p>
+      <p class="thread-message-content" style="color:#333;line-height:1.5;margin:8px 0">${esc(note.content)}</p>
     </div>
   `;
   
@@ -1489,7 +1489,7 @@ function renderThreadContent(note){
           <button class="thread-reply-vote" data-reply-id="${r.id}" data-vote="down" aria-label="不讚" aria-pressed="${r.userVote==='down'}" title="不讚" style="background:none;border:none;cursor:pointer;color:${r.userVote==='down'?'#963b2e':'inherit'}">&#9660; ${r.downvote_count||0}</button>`}
         </div>
       </div>
-      <p style="color:#666;line-height:1.5;margin:8px 0">${esc(r.content)}</p>
+      <p class="thread-message-content" style="color:#666;line-height:1.5;margin:8px 0">${esc(r.content)}</p>
     </div>
   `).join('') : '<div style="padding:16px;text-align:center;color:#888;background:#fafafa">&#23578;&#28961;&#22238;&#35206;</div>';
     container.innerHTML=mainHTML+repliesHTML;
@@ -1675,7 +1675,11 @@ function closeThreadModal(){
   window.threadData=null;
 }
 
-function showBubble(note){const tip=$('#bubble-tooltip');tip.innerHTML=`<strong>${esc(notePageName(note.doc))}</strong>${esc(note.comment||'尚未填寫註解')}`;tip.hidden=false;clearTimeout(showBubble.timer);showBubble.timer=setTimeout(hideBubble,5000);navigator.vibrate?.(25);}
+function annotationPreviewText(value,maxLength=50){
+  const characters=Array.from(String(value||''));
+  return characters.length>maxLength?characters.slice(0,maxLength).join('')+'...':characters.join('');
+}
+function showBubble(note){const tip=$('#bubble-tooltip');tip.innerHTML=`<strong>${esc(notePageName(note.doc))}</strong>${esc(annotationPreviewText(note.comment||'尚未填寫註解'))}`;tip.hidden=false;clearTimeout(showBubble.timer);showBubble.timer=setTimeout(hideBubble,5000);navigator.vibrate?.(25);}
 function hideBubble(){$('#bubble-tooltip').hidden=true;}
 function rangeFromOffsets(root,start,end){
   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node,pos=0,sNode,eNode,sOffset,eOffset;
