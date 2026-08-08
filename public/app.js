@@ -180,6 +180,7 @@ fetch('/data/iching.json').then(check).then(r=>r.json()).then(data=>{state.hexag
 function bindUI(){
   $('#menu-button').onclick=openDrawer; $('#close-menu').onclick=closeDrawer; $('#backdrop').onclick=closeAll;
   $('#notes-button').onclick=openNotes;
+  $('#close-panel').onclick=closeNotesPanel;
   search.oninput=e=>{state.query=e.target.value.trim().toLowerCase();renderHexagramList();};
   addEventListener('hashchange',route); addEventListener('resize',()=>requestAnimationFrame(applyHighlights));
   addEventListener('scroll',hideBubble,{passive:true});
@@ -1800,6 +1801,11 @@ function openNotes(){
   // 顯示面板
   panel.hidden=false;
   $('#backdrop').hidden=false;
+}
+function closeNotesPanel(){
+  $('#notes-panel').hidden=true;
+  if(!$('#drawer').classList.contains('open'))$('#backdrop').hidden=true;
+  $('#notes-button').focus({preventScroll:true});
 }
 function renderNotes(){
   const box=$('#notes-list');
