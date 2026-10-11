@@ -10,6 +10,7 @@ execFileSync('python', ['-c', [
 ].join(';')], { stdio: 'inherit' });
 
 const source = fs.readFileSync('ToDO.txt', 'utf8');
+const sourceLines = source.split(/\r?\n/);
 const hexagrams = JSON.parse(fs.readFileSync('iching/iching.json', 'utf8'));
 const headings = [...source.matchAll(/《([^》]+)》/g)];
 const labelPattern = /(初九|九二|九三|九四|九五|上九|用九|尚九|迵九|初六|六二|六三|六四|六五|上六|用六|尚六|迵六|五五|九□|□三|□五|六□|□□)\s*[：:]/g;
@@ -19,6 +20,7 @@ const reports = [];
 
 for (let index = 0; index < hexagrams.length; index += 1) {
   const hexagram = hexagrams[index];
+  delete hexagram.silk_scripture;
   for (const line of hexagram.lines) delete line.silk_scripture;
   const heading = headings.find(item => item[1] === hexagram.name || item[1] === headingAliases.get(hexagram.name));
   const nextHeading = headings.find(item => item.index > (heading?.index ?? -1));
@@ -27,6 +29,14 @@ for (let index = 0; index < hexagrams.length; index += 1) {
     continue;
   }
   const block = source.slice(heading.index, nextHeading?.index ?? source.length);
+  const sourceHeadingLine = sourceLines.findIndex(line => line.includes(`《${hexagram.name}》`) || line.includes(`《${headingAliases.get(hexagram.name)}》`));
+  const guaLines = sourceLines.slice(sourceHeadingLine + 1)
+    .map(line => line.trim())
+    .filter(line => line && !line.includes('《'))
+    .slice(0, 2);
+  if (guaLines.length >= 2) {
+    hexagram.silk_scripture = guaLines[1].replace(/^[^：:]+[：:]/, '').trim();
+  }
   const matches = [...block.matchAll(labelPattern)].map(match => ({ label: match[1], index: match.index, length: match[0].length }));
   const expected = hexagram.lines.length;
   let cursor = 0;

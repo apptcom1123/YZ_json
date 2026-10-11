@@ -387,15 +387,16 @@ function renderHexagramList(){
 
 function renderHexagram(){
   const x=state.hexagrams.find(item=>item.id===state.selectedId);if(!x)return;setTitle(`${x.name}卦`);
-  reader.innerHTML=`<article class="annotatable" data-doc="gua-${x.id}"><header class="hero"><div class="hero-symbol">${esc(x.symbol)}</div><div><h1><span class="sequence">第 ${x.id} 卦</span>${esc(x.name)}</h1><p class="combination">下${esc(x.combination[0])} · 上${esc(x.combination[1])}</p><p class="scripture">${esc(x.scripture)}</p></div></header><h2 class="section-title">卦 詩</h2><p class="poetry main-poetry">${esc(x.poetry)}</p><h2 class="section-title">爻 辭 與 詩 訣</h2><div class="lines">${x.lines.map(renderLine).join('')}</div></article>`;
+  const silk=x.silk_scripture?`<p class="scripture silk-scripture">${esc(x.silk_scripture)}</p>`:'';
+  reader.innerHTML=`<article class="annotatable" data-doc="gua-${x.id}"><header class="hero"><div class="hero-symbol">${esc(x.symbol)}</div><div><h1><span class="sequence">第 ${x.id} 卦</span>${esc(x.name)}</h1><p class="combination">下${esc(x.combination[0])} · 上${esc(x.combination[1])}</p><p class="scripture">${esc(x.scripture)}</p>${silk}</div></header><h2 class="section-title">卦 詩</h2><p class="poetry main-poetry">${esc(x.poetry)}</p><h2 class="section-title">爻 辭 與 詩 訣</h2><div class="lines">${x.lines.map(renderLine).join('')}</div></article>`;
   applyHighlights();
 }
 
 function renderLine(line){
   const visual=line.image?`<img src="${line.image.replace(/^\.\.\/image\//,'/image/')}" alt="${esc(line.name)}圖" loading="lazy">`:'<span class="image-missing">圖片尚未提供</span>';
   const poem=line.poetry?`<p class="poetry line-poetry">${esc(line.poetry)}</p>`:'<p class="no-poetry">此爻無附加詩訣</p>';
-  const silk=line.silk_scripture?`<p class="line-scripture silk-scripture"><span class="scripture-label">帛書：</span>${esc(line.silk_scripture)}</p>`:'';
-  return `<section class="line-card"><div class="line-top"><div class="line-visual">${visual}</div><div><h3 class="line-name">${esc(line.name)}<span class="line-type">${line.type?'陽爻':'陰爻'}</span></h3><p class="line-scripture"><span class="scripture-label">傳本：</span>${esc(line.scripture)}</p>${silk}</div></div>${poem}</section>`;
+  const silk=line.silk_scripture?`<p class="line-scripture silk-scripture">${esc(line.silk_scripture)}</p>`:'';
+  return `<section class="line-card"><div class="line-top"><div class="line-visual">${visual}</div><div><h3 class="line-name">${esc(line.name)}<span class="line-type">${line.type?'陽爻':'陰爻'}</span></h3><p class="line-scripture">${esc(line.scripture)}</p>${silk}</div></div>${poem}</section>`;
 }
 
 async function renderText(id){
@@ -2068,7 +2069,7 @@ function closeDrawer(){$('#drawer').classList.remove('open');$('#drawer').setAtt
 function closeAll(){closeDrawer();$('#notes-panel').hidden=true;$('#backdrop').hidden=true;}
 function renderNavState(){$$('.nav-button');document.querySelectorAll('.nav-button').forEach(b=>b.classList.toggle('active',b.dataset.page===state.page));$('#hexagram-tools').hidden=state.page!=='hexagrams';}
 function setTitle(label){$('#page-label').textContent=label;document.title=`${label} · 周易讀本`;scrollTo({top:0,behavior:'smooth'});}
-function matchesQuery(x){if(!state.query)return true;return [x.id,x.name,x.scripture,x.poetry,...x.lines.flatMap(y=>[y.name,y.scripture,y.silk_scripture,y.poetry])].join(' ').toLowerCase().includes(state.query);}
+function matchesQuery(x){if(!state.query)return true;return [x.id,x.name,x.scripture,x.silk_scripture,x.poetry,...x.lines.flatMap(y=>[y.name,y.scripture,y.silk_scripture,y.poetry])].join(' ').toLowerCase().includes(state.query);}
 function check(response){if(!response.ok)throw new Error(response.status);return response;}
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800);}
 function esc(value=''){return String(value).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
