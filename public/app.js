@@ -3,8 +3,9 @@ const TEXTS=[
   {id:'wen',label:'文言',file:'文言.md'}, {id:'ji',label:'繫辭',file:'系辭.md'},
   {id:'shuo',label:'說卦',file:'說卦.md'}, {id:'xu',label:'序卦',file:'序卦.md'},
   {id:'za',label:'雜卦',file:'雜卦.md'}, {id:'full',label:'彖象合參',file:'易經_彖_象_文言_序卦.md'},
-  {id:'divination',label:'占卜流程',file:'占卜流程.md'}
+  {id:'divination',label:'占卜流程',file:'占卜流程.md'}, {id:'classics',label:'古籍'}
 ];
+const classicState={documents:[],selected:'',query:'',showRaw:false,mode:'reader',selectedEntry:null,loading:false,visibleCount:60};
 const state={hexagrams:[],selectedId:1,query:'',page:'hexagrams',pending:null,editingId:null,notes:loadNotes(),divinations:loadDivinations(),currentDivinationResult:null,editingDivinationIndex:null};
 const $=(selector)=>document.querySelector(selector);
 const reader=$('#reader'),list=$('#hexagram-list'),search=$('#search'),count=$('#result-count');
@@ -372,6 +373,7 @@ function initNavigation(){
 function route(){
   state.pending=null;$('#highlight-action').hidden=true;hideBubble();document.querySelectorAll('.annotation-bubble').forEach(x=>x.remove());
   const [kind,value]=location.hash.slice(1).split('/');
+  if(kind==='text'&&value==='classics') return renderClassics();
   if(kind==='text'&&TEXTS.some(x=>x.id===value)) return renderText(value);
   const id=kind==='gua'?Number(value):1; state.selectedId=state.hexagrams.some(x=>x.id===id)?id:1;
   state.page='hexagrams'; renderNavState();renderHexagramList();renderHexagram();
@@ -392,7 +394,8 @@ function renderHexagram(){
 function renderLine(line){
   const visual=line.image?`<img src="${line.image.replace(/^\.\.\/image\//,'/image/')}" alt="${esc(line.name)}圖" loading="lazy">`:'<span class="image-missing">圖片尚未提供</span>';
   const poem=line.poetry?`<p class="poetry line-poetry">${esc(line.poetry)}</p>`:'<p class="no-poetry">此爻無附加詩訣</p>';
-  return `<section class="line-card"><div class="line-top"><div class="line-visual">${visual}</div><div><h3 class="line-name">${esc(line.name)}<span class="line-type">${line.type?'陽爻':'陰爻'}</span></h3><p class="line-scripture">${esc(line.scripture)}</p></div></div>${poem}</section>`;
+  const silk=line.silk_scripture?`<p class="line-scripture silk-scripture"><span class="scripture-label">帛書：</span>${esc(line.silk_scripture)}</p>`:'';
+  return `<section class="line-card"><div class="line-top"><div class="line-visual">${visual}</div><div><h3 class="line-name">${esc(line.name)}<span class="line-type">${line.type?'陽爻':'陰爻'}</span></h3><p class="line-scripture"><span class="scripture-label">傳本：</span>${esc(line.scripture)}</p>${silk}</div></div>${poem}</section>`;
 }
 
 async function renderText(id){
@@ -400,6 +403,92 @@ async function renderText(id){
   if(id==='about')return renderAbout();
   try{const md=await fetch(`/texts/${encodeURIComponent(page.file)}`).then(check).then(r=>r.text());reader.innerHTML=`<article class="text-page annotatable" data-doc="text-${id}"><header><p class="text-kicker">易 傳 原 文</p><h1>${page.label}</h1></header><div class="prose">${plainMarkdown(md)}</div></article>`;applyHighlights();}
   catch{reader.innerHTML='<p class="empty">此篇文字載入失敗。</p>';}
+}
+
+async function renderClassics(){
+  state.page='classics';renderNavState();setTitle('古籍');
+  reader.innerHTML='<article class="text-page"><p class="loading">正在載入古籍資料……</p></article>';
+  if(!classicState.documents.length){
+    classicState.loading=true;
+    try{
+      const index=await fetch('/data/classics/index.json').then(check).then(r=>r.json());
+      classicState.documents=await Promise.all(index.documents.map(item=>fetch(`/data/classics/${encodeURIComponent(item.file)}`).then(check).then(r=>r.json())));
+      classicState.selected=classicState.selected||classicState.documents[0]?.id||'';
+    }catch(error){
+      console.error('古籍資料載入失敗',error);
+      reader.innerHTML='<article class="text-page"><p class="empty">古籍資料載入失敗，請確認建置後的 classics 資料已部署。</p></article>';
+      classicState.loading=false;return;
+    }
+    classicState.loading=false;
+  }
+  renderClassicReader();
+}
+
+function renderClassicReader(){
+  hideBubble();
+  const doc=classicState.documents.find(item=>item.id===classicState.selected)||classicState.documents[0];
+  if(!doc){reader.innerHTML='<p class="empty">目前沒有古籍資料。</p>';return;}
+  const query=classicState.query.trim().toLowerCase();
+  const allEntries=classicState.documents.flatMap(item=>item.entries.map(entry=>({...entry,document_id:item.id,document_title:item.title})));
+  let entries=classicState.mode==='search'
+    ? allEntries.filter(entry=>!query||`${entry.text} ${entry.punctuated_text||''} ${entry.context?.summary||''}`.toLowerCase().includes(query))
+    : doc.entries;
+  const textOf=entry=>classicState.showRaw?(entry.text||''):(entry.punctuated_text||entry.text||'');
+  const totalEntries=entries;
+  entries=entries.slice(0,classicState.visibleCount);
+  reader.innerHTML=`<article class="text-page classics-page annotatable" data-doc="classic-${esc(doc.id)}">
+    <div class="classic-toolbar"><div class="classic-modes"><button class="classic-mode${classicState.mode==='reader'?' active':''}" data-mode="reader" type="button">電子書閱讀</button><button class="classic-mode${classicState.mode==='search'?' active':''}" data-mode="search" type="button">關鍵詞搜尋</button></div>
+      ${classicState.mode==='reader'?`<label>選讀 <select id="classic-select">${classicState.documents.map(item=>`<option value="${esc(item.id)}"${item.id===doc.id?' selected':''}>${esc(item.title)}</option>`).join('')}</select></label>`:''}
+      ${classicState.mode==='search'?`<label class="classic-search">搜尋全部古籍 <input id="classic-search" type="search" value="${esc(classicState.query)}" placeholder="輸入人物、事件或原文…" autofocus></label>`:''}
+      <label class="classic-toggle"><input id="classic-raw" type="checkbox"${classicState.showRaw?' checked':''}> 顯示未標點原文</label>
+    </div>
+    <p class="classic-count">${classicState.mode==='reader'?`${esc(doc.title)} · `:''}顯示 ${entries.length} / ${classicState.mode==='reader'?doc.entries.length:allEntries.length} 條 · ${classicState.showRaw?'原始文本':'整理斷句'}</p>
+    <div class="classic-entries">${entries.map((entry,index)=>`<section class="classic-entry${classicState.mode==='reader'?' classic-reading-sentence':''}" data-entry-id="${esc(entry.id)}" data-document-id="${esc(entry.document_id||doc.id)}" tabindex="0">${classicState.mode==='search'?`<div class="classic-entry-head"><span>${esc(entry.document_title)} · ${esc(entry.section||'')} · ${entry.order??index+1}</span></div>`:''}<p class="classic-text">${esc(textOf(entry))}</p>${classicState.mode==='search'?renderClassicSupplement(entry):''}</section>`).join('')}</div>
+  </article>`;
+  if(entries.length<totalEntries.length){
+    const more=document.createElement('button');
+    more.className='classic-load-more';more.type='button';more.textContent='載入更多';
+    more.onclick=()=>{classicState.visibleCount+=60;renderClassicReader();};
+    reader.querySelector('.classic-entries')?.after(more);
+  }
+  document.querySelectorAll('.classic-mode').forEach(button=>button.onclick=()=>{classicState.mode=button.dataset.mode;classicState.visibleCount=60;classicState.selectedEntry=null;renderClassicReader();});
+  if($('#classic-select'))$('#classic-select').onchange=e=>{classicState.selected=e.target.value;classicState.visibleCount=60;classicState.selectedEntry=null;renderClassicReader();};
+  if($('#classic-search'))$('#classic-search').oninput=e=>{classicState.query=e.target.value;classicState.visibleCount=60;renderClassicReader();};
+  $('#classic-raw').onchange=e=>{classicState.showRaw=e.target.checked;classicState.visibleCount=60;renderClassicReader();};
+  document.querySelectorAll('.classic-entry').forEach(entry=>{
+    const select=()=>showClassicContext(entry.dataset.documentId,entry.dataset.entryId,entry);
+    entry.onclick=select;entry.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};
+  });
+  if(classicState.selectedEntry&&classicState.mode!=='search')showClassicContext(classicState.selectedEntry.documentId,classicState.selectedEntry.entryId);
+  applyHighlights();
+}
+
+function classicContextText(entry){
+  const context=entry.context||{};
+  const terms=Array.isArray(context.background_terms)?context.background_terms:[];
+  const links=Array.isArray(context.historical_connections)?context.historical_connections:[];
+  return `${context.plain_meaning||context.summary||''}${context.contextual_background?`\n背景：${context.contextual_background}`:''}${context.derived_implications?`\n延伸含意：${context.derived_implications}`:''}${terms.length?`\n相關詞條：${terms.map(item=>typeof item==='string'?item:(item.term||item.explanation||JSON.stringify(item))).join('；')}`:''}${links.length?`\n歷史聯繫：${links.map(item=>typeof item==='string'?item:(item.event||item.description||JSON.stringify(item))).join('；')}`:''}`.trim();
+}
+
+function renderClassicSupplement(entry){
+  const text=classicContextText(entry);
+  return text?`<div class="classic-search-supplement"><strong>補充</strong><p>${esc(text)}</p></div>`:'';
+}
+
+function showClassicContext(documentId,entryId,target){
+  const doc=classicState.documents.find(item=>item.id===documentId);
+  const entry=doc?.entries.find(item=>item.id===entryId);
+  const panel=$('#bubble-tooltip');
+  if(!entry||!panel||classicState.mode==='search')return;
+  classicState.selectedEntry={documentId,entryId};
+  const text=classicContextText(entry);
+  if(!text){hideBubble();return;}
+  panel.innerHTML=`<strong>脈絡註解</strong>${esc(text)}`;
+  panel.classList.add('classic-context-bubble');
+  panel.style.left='14px';panel.style.right='14px';panel.style.top='auto';panel.style.bottom='calc(18px + env(safe-area-inset-bottom))';
+  panel.hidden=false;
+  document.querySelectorAll('.classic-entry.is-selected').forEach(item=>item.classList.remove('is-selected'));
+  target.classList.add('is-selected');
 }
 
 function renderAbout(){
@@ -1979,7 +2068,7 @@ function closeDrawer(){$('#drawer').classList.remove('open');$('#drawer').setAtt
 function closeAll(){closeDrawer();$('#notes-panel').hidden=true;$('#backdrop').hidden=true;}
 function renderNavState(){$$('.nav-button');document.querySelectorAll('.nav-button').forEach(b=>b.classList.toggle('active',b.dataset.page===state.page));$('#hexagram-tools').hidden=state.page!=='hexagrams';}
 function setTitle(label){$('#page-label').textContent=label;document.title=`${label} · 周易讀本`;scrollTo({top:0,behavior:'smooth'});}
-function matchesQuery(x){if(!state.query)return true;return [x.id,x.name,x.scripture,x.poetry,...x.lines.flatMap(y=>[y.name,y.scripture,y.poetry])].join(' ').toLowerCase().includes(state.query);}
+function matchesQuery(x){if(!state.query)return true;return [x.id,x.name,x.scripture,x.poetry,...x.lines.flatMap(y=>[y.name,y.scripture,y.silk_scripture,y.poetry])].join(' ').toLowerCase().includes(state.query);}
 function check(response){if(!response.ok)throw new Error(response.status);return response;}
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800);}
 function esc(value=''){return String(value).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}

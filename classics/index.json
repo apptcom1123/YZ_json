@@ -1,0 +1,35 @@
+{
+  "schema": "yz-classics-index-v1",
+  "documents": [
+    {
+      "id": "shiji_yin_zhou",
+      "title": "史記：殷本紀、周本紀",
+      "file": "shiji_yin_zhou.json",
+      "entries": 828
+    },
+    {
+      "id": "shangshu_zhoushu",
+      "title": "尚書：周書",
+      "file": "shangshu_zhoushu.json",
+      "entries": 1533
+    },
+    {
+      "id": "zhushu_jinian_siku",
+      "title": "竹書紀年：四庫全書本",
+      "file": "zhushu_jinian_siku.json",
+      "entries": 828
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt",
+      "title": "王家台秦簡：歸藏易公開釋文節錄",
+      "file": "wangjiatai_guicang_excerpt.json",
+      "entries": 75
+    },
+    {
+      "id": "zhushu_jinian_guben",
+      "title": "古本竹書紀年輯校（朱右曾輯、王國維校補）",
+      "file": "zhushu_jinian_guben.json",
+      "entries": 389
+    }
+  ]
+}

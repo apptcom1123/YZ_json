@@ -1,0 +1,1574 @@
+{
+  "schema": "yz-classics-sentence-v1",
+  "id": "wangjiatai_guicang_excerpt",
+  "title": "王家台秦簡：歸藏易公開釋文節錄",
+  "language": "zh-Hant",
+  "source_file": "王家台秦簡_歸藏易_公開釋文節錄.md",
+  "source_urls": [
+    "https://www.gongfa.com/index.php?c=show&id=13392",
+    "https://www.fdgwz.org.cn/Web/Show/1003"
+  ],
+  "annotation_policy": "正文 text 完全保留；每句 context 提供敘事功能、前後脈絡、詞語背景與歷史聯繫。背景說明不是把詞語改寫進正文；沒有可靠對應時保留空陣列或 null。",
+  "entries": [
+    {
+      "id": "wangjiatai_guicang_excerpt__0001",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 1,
+      "text": ">注意：目前公開資料並未提供394支簡的完整、定本復原。",
+      "punctuated_text": ">注意：目前公開資料並未提供394支簡的完整、定本復原。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "注意：目前公開資料沒有提供394支竹簡的完整定本復原。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "注意：目前公開資料沒有提供394支竹簡的完整定本復原。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0002",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 2,
+      "text": "以下是公開頁面所載的53條／節錄釋文；",
+      "punctuated_text": "以下是公開頁面所載的53條／節錄釋文；",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "以下是公開頁面收錄的53條節錄釋文。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "以下是公開頁面收錄的53條節錄釋文。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0003",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 3,
+      "text": "◇表示殘斷，□表示不識，方括號為整理補字或卦名整理。",
+      "punctuated_text": "◇表示殘斷，□表示不識，方括號為整理補字或卦名整理。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "◇表示殘斷，□表示不識，方括號是整理補字或卦名整理。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "◇表示殘斷，□表示不識，方括號是整理補字或卦名整理。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0004",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 4,
+      "text": "王家臺秦簡《歸藏》編號者一百六十四支，未編號的殘簡二百三十支，共計三百九十四支，總字數約四千餘字。",
+      "punctuated_text": "王家臺秦簡《歸藏》編號者一百六十四支，未編號的殘簡二百三十支，共計三百九十四支，總字數約四千餘字。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "王家臺秦簡《歸藏》有編號竹簡164支，未編號殘簡230支，共394支，總字數約四千多字。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "王家臺秦簡《歸藏》有編號竹簡164支，未編號殘簡230支，共394支，總字數約四千多字。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0005",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 5,
+      "text": "由於殘缺過甚，至今尚未拼出一支整簡，順序也難以排定。",
+      "punctuated_text": "由於殘缺過甚，至今尚未拼出一支整簡，順序也難以排定。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "由於殘缺嚴重，至今還沒有拼合出一支完整竹簡，簡文順序也很難確定。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "由於殘缺嚴重，至今還沒有拼合出一支完整竹簡，簡文順序也很難確定。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0006",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 6,
+      "text": "在這批竹簡重，共有七十組卦畫，其中十六組相同，除去相同數，不同的卦畫有五十四種。",
+      "punctuated_text": "在這批竹簡重，共有七十組卦畫，其中十六組相同，除去相同數，不同的卦畫有五十四種。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "這批竹簡中共有七十組卦畫，其中十六組重複，扣除重複後，不同的卦畫有五十四種。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "這批竹簡中共有七十組卦畫，其中十六組重複，扣除重複後，不同的卦畫有五十四種。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0007",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 7,
+      "text": "卦畫皆以一表示陽爻，以∧表示陰爻。",
+      "punctuated_text": "卦畫皆以一表示陽爻，以∧表示陰爻。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "所有卦畫都用「一」表示陽爻，用「∧」表示陰爻。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "所有卦畫都用「一」表示陽爻，用「∧」表示陰爻。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0008",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 8,
+      "text": "卦名有七十六個，其中重複者二十三個，實際卦名五十三個。",
+      "punctuated_text": "卦名有七十六個，其中重複者二十三個，實際卦名五十三個。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "卦名共有七十六個，其中二十三個重複，實際不同的卦名有五十三個。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "卦名共有七十六個，其中二十三個重複，實際不同的卦名有五十三個。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0009",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 9,
+      "text": "此外，卦辭也有一部分重複。",
+      "punctuated_text": "此外，卦辭也有一部分重複。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "此外，部分卦辭也有重複。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "此外，部分卦辭也有重複。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0010",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 10,
+      "text": "竹簡有兩種，一種寬而薄，而另一種窄而厚。",
+      "punctuated_text": "竹簡有兩種，一種寬而薄，而另一種窄而厚。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "竹簡有兩種形制：一種寬而薄，另一種窄而厚。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "竹簡有兩種形制：一種寬而薄，另一種窄而厚。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0011",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 11,
+      "text": "因此，我們推測，這批《歸藏》有兩種抄本。",
+      "punctuated_text": "因此，我們推測，這批《歸藏》有兩種抄本。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "因此可以推測，這批《歸藏》材料有兩種抄本。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "因此可以推測，這批《歸藏》材料有兩種抄本。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0012",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 12,
+      "text": "秦簡《歸藏》的卦畫皆可與今本《周易》對應起來，卦名也與傳本《歸藏》、不帛書《周易》及今本《周易》大部分相同。",
+      "punctuated_text": "秦簡《歸藏》的卦畫皆可與今本《周易》對應起來，卦名也與傳本《歸藏》、不帛書《周易》及今本《周易》大部分相同。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "秦簡《歸藏》的卦畫都能與今本《周易》相互對應，卦名也大多和傳本《歸藏》、帛書《周易》及今本《周易》相同。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "秦簡《歸藏》的卦畫都能與今本《周易》相互對應，卦名也大多和傳本《歸藏》、帛書《周易》及今本《周易》相同。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "周",
+            "note": "周族、周王朝或周人政治秩序的泛稱。"
+          },
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0013",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 13,
+      "text": "現摘錄部分釋文如下（本釋文以錄簡頭爲主，重複者只錄其一，但卦畫和卦名可互相補充者則皆錄下來。",
+      "punctuated_text": "現摘錄部分釋文如下（本釋文以錄簡頭爲主，重複者只錄其一，但卦畫和卦名可互相補充者則皆錄下來。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "現在摘錄部分釋文如下；本釋文以竹簡開頭為主，重複內容只收錄一次，但能互相補充卦畫和卦名的仍一併收錄。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "現在摘錄部分釋文如下；本釋文以竹簡開頭為主，重複內容只收錄一次，但能互相補充卦畫和卦名的仍一併收錄。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0014",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 14,
+      "text": "釋文大致按馬國翰《玉函山房輯佚書》之《六十四卦》的順序排列，下面的編號爲清理時的原始編號，上面的編號爲臨時序列號。",
+      "punctuated_text": "釋文大致按馬國翰《玉函山房輯佚書》之《六十四卦》的順序排列，下面的編號爲清理時的原始編號，上面的編號爲臨時序列號。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "釋文大致按照馬國翰《玉函山房輯佚書·六十四卦》的順序排列；下方編號是清理時的原始編號，上方編號是臨時序列號。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "釋文大致按照馬國翰《玉函山房輯佚書·六十四卦》的順序排列；下方編號是清理時的原始編號，上方編號是臨時序列號。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0015",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 15,
+      "text": "竹簡殘斷者以◇標出，字跡模糊、無法辨識者以□標出，通假字、異體字不另註明，但據文意明顯有脫字者以【】補足。",
+      "punctuated_text": "竹簡殘斷者以◇標出，字跡模糊、無法辨識者以□標出，通假字、異體字不另註明，但據文意明顯有脫字者以【】補足。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "竹簡殘斷用◇標示，字跡模糊或不能辨識用□標示；通假字、異體字不另加說明，依文意明顯脫漏的字用【】補足。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "竹簡殘斷用◇標示，字跡模糊或不能辨識用□標示；通假字、異體字不另加說明，依文意明顯脫漏的字用【】補足。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0016",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 16,
+      "text": "本釋文是剛清洗出來時所作的原始釋文，未經仔細校對，錯誤之處在所難免，若有牴觸，以將來正式出版爲準）：",
+      "punctuated_text": "本釋文是剛清洗出來時所作的原始釋文，未經仔細校對，錯誤之處在所難免，若有牴觸，以將來正式出版爲準）：",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "這份釋文是竹簡剛清洗後整理的初步釋文，尚未仔細校對，難免有錯誤；若有矛盾，應以未來正式出版的定本為準。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "這份釋文是竹簡剛清洗後整理的初步釋文，尚未仔細校對，難免有錯誤；若有矛盾，應以未來正式出版的定本為準。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0017",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 17,
+      "text": "1、寡曰：不仁者夏後啓是以登天啻弗良而投之淵寅共工隊□江□◇501",
+      "punctuated_text": "1、寡曰：不仁者夏後啓是以登天啻弗良而投之淵寅共工隊□江□◇501",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "1．《寡》卦說：不仁的人夏后啟因此登上天界；上帝認為他不善，把他投入深淵。寅與共工墜入江中，後文有缺字與殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "1．《寡》卦說：不仁的人夏后啟因此登上天界；上帝認為他不善，把他投入深淵。寅與共工墜入江中，後文有缺字與殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "夏",
+            "note": "中國傳統王朝譜系中的早期王朝，與禹、啟、桀及商湯伐桀的故事相連。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0018",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 18,
+      "text": "2、天目朝＝不利爲草木贊＝偁下□◇181（知北逰按：此簡頭有乾卦卦畫）",
+      "punctuated_text": "2、天目朝＝不利爲草木贊＝偁下□◇181（知北逰按：此簡頭有乾卦卦畫）",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "2．簡文可讀作「天目朝……不利於草木……」，中間有缺字和殘斷；整理者指出簡頭有乾卦卦畫。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "2．簡文可讀作「天目朝……不利於草木……」，中間有缺字和殘斷；整理者指出簡頭有乾卦卦畫。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0019",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 19,
+      "text": "3、肫曰昔者效龍卜爲上天而攴◇323",
+      "punctuated_text": "3、肫曰昔者效龍卜爲上天而攴◇323",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "3．《肫》卦說：從前效龍占卜，想成為上天所用之物；後文殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "3．《肫》卦說：從前效龍占卜，想成為上天所用之物；後文殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0020",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 20,
+      "text": "4、【蒙】曰昔者□□卜□◇",
+      "punctuated_text": "4、【蒙】曰昔者□□卜□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "4．《蒙》卦說：從前曾占卜某件事，但人物、占問內容和結果均已缺失。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "4．《蒙》卦說：從前曾占卜某件事，但人物、占問內容和結果均已缺失。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0021",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 21,
+      "text": "5、訟曰：昔者□□卜訟啓□□□◇",
+      "punctuated_text": "5、訟曰：昔者□□卜訟啓□□□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "5．《訟》卦說：從前曾占問訟事，與夏后啟有關的文字大多殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "5．《訟》卦說：從前曾占問訟事，與夏后啟有關的文字大多殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0022",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 22,
+      "text": "6、師曰：昔者穆天子卜出師而攴佔□□□◇439◇龍降於天而□◇◇遠飛而中天蒼◇",
+      "punctuated_text": "6、師曰：昔者穆天子卜出師而攴佔□□□◇439◇龍降於天而□◇◇遠飛而中天蒼◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "6．《師》卦說：從前穆天子占卜出兵，判辭殘缺；又記有龍從天而降，後來遠飛而入蒼天，中間多處缺字和殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "6．《師》卦說：從前穆天子占卜出兵，判辭殘缺；又記有龍從天而降，後來遠飛而入蒼天，中間多處缺字和殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0023",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 23,
+      "text": "7、比曰：比之芣＝比之蒼＝生子二人或司陰司陽不□姓□◇216",
+      "punctuated_text": "7、比曰：比之芣＝比之蒼＝生子二人或司陰司陽不□姓□◇216",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "7．《比》卦說：「比之芣」也作「比之蒼」；生下兩個孩子，有人主管陰、有人主管陽，後文缺字並殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "7．《比》卦說：「比之芣」也作「比之蒼」；生下兩個孩子，有人主管陰、有人主管陽，後文缺字並殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0024",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 24,
+      "text": "8、少督曰：昔者□小子卜亓邦尚毋有吝而攴◇206",
+      "punctuated_text": "8、少督曰：昔者□小子卜亓邦尚毋有吝而攴◇206",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "8．《少督》卦說：從前某位年輕君主占問自己的國家，希望沒有憂患；後面的占辭殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "8．《少督》卦說：從前某位年輕君主占問自己的國家，希望沒有憂患；後面的占辭殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0025",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 25,
+      "text": "9、履曰：昔者羿射陼比莊石上羿果射之曰履□◇461",
+      "punctuated_text": "9、履曰：昔者羿射陼比莊石上羿果射之曰履□◇461",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "9．《履》卦說：從前羿在陼比莊的石上射箭，果然射中了；後文有「履」字及缺字。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "9．《履》卦說：從前羿在陼比莊的石上射箭，果然射中了；後文有「履」字及缺字。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0026",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 26,
+      "text": "10、柰曰：昔者攷龍卜□□而攴佔囷＝京＝佔之曰不吉不柰之□◇11",
+      "punctuated_text": "10、柰曰：昔者攷龍卜□□而攴佔囷＝京＝佔之曰不吉不柰之□◇11",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "10．《柰》卦說：從前考察龍而占卜某事，請囷、京判占；占者說不吉，事情不可承受，後文缺字。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "10．《柰》卦說：從前考察龍而占卜某事，請囷、京判占；占者說不吉，事情不可承受，後文缺字。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0027",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 27,
+      "text": "11、否曰：昔者□□□◇",
+      "punctuated_text": "11、否曰：昔者□□□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "11．《否》卦說：從前曾有一段占問，但文字大多缺失。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "11．《否》卦說：從前曾有一段占問，但文字大多缺失。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0028",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 28,
+      "text": "12、同人曰黃啻與炎啻戰◇182◇＝鹹＝佔之曰果哉而有吝□◇189",
+      "punctuated_text": "12、同人曰黃啻與炎啻戰◇182◇＝鹹＝佔之曰果哉而有吝□◇189",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "12．《同人》卦說：黃帝與炎帝交戰。殘簡另見「鹹」字；占者說事情果然如此，但仍有憂吝，後文缺失。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "12．《同人》卦說：黃帝與炎帝交戰。殘簡另見「鹹」字；占者說事情果然如此，但仍有憂吝，後文缺失。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0029",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 29,
+      "text": "13、右曰昔者平公卜亓邦尚毋【有】咎而攴佔神＝老＝佔曰古有子亓□間漻四旁敬□風雷不◇302",
+      "punctuated_text": "13、右曰昔者平公卜亓邦尚毋【有】咎而攴佔神＝老＝佔曰古有子亓□間漻四旁敬□風雷不◇302",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "13．《右》卦說：從前平公占問國家，希望沒有災咎；判辭說古代有一位君子，四方空曠，應當敬慎；風雷之後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "13．《右》卦說：從前平公占問國家，希望沒有災咎；判辭說古代有一位君子，四方空曠，應當敬慎；風雷之後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0030",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 30,
+      "text": "14、大過曰昔者日月卜望□◇",
+      "punctuated_text": "14、大過曰昔者日月卜望□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "14、大過說昔者日月卜望□◇",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "14、大過說昔者日月卜望□◇",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0031",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 31,
+      "text": "15、亦曰：昔者◇",
+      "punctuated_text": "15、亦曰：昔者◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "15．《亦》卦說：從前曾有一段記載，但正文只剩開頭。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "15．《亦》卦說：從前曾有一段記載，但正文只剩開頭。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0032",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 32,
+      "text": "16、囷曰：昔者夏後啓卜亓邦尚毋有吝而攴佔◇208",
+      "punctuated_text": "16、囷曰：昔者夏後啓卜亓邦尚毋有吝而攴佔◇208",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "16．《囷》卦說：從前夏后啟占問自己的國家，希望沒有憂患；占辭已殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "16．《囷》卦說：從前夏后啟占問自己的國家，希望沒有憂患；占辭已殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "夏",
+            "note": "中國傳統王朝譜系中的早期王朝，與禹、啟、桀及商湯伐桀的故事相連。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0033",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 33,
+      "text": "17、井曰：昔者夏後啓貞卜◇319",
+      "punctuated_text": "17、井曰：昔者夏後啓貞卜◇319",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "17．《井》卦說：從前夏后啟以貞問占卜；後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "17．《井》卦說：從前夏后啟以貞問占卜；後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "夏",
+            "note": "中國傳統王朝譜系中的早期王朝，與禹、啟、桀及商湯伐桀的故事相連。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0034",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 34,
+      "text": "18、鼒曰：昔者宋君卜封□而攴佔巫蒼＝佔之曰吉鼒之芲＝鼒之焠＝初有吝後果述214",
+      "punctuated_text": "18、鼒曰：昔者宋君卜封□而攴佔巫蒼＝佔之曰吉鼒之芲＝鼒之焠＝初有吝後果述214",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "18．《鼒》卦說：從前宋君占問封立之事，請巫蒼判占；占者說吉。判辭說開始雖有憂吝，後來終究能完成；末尾殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "18．《鼒》卦說：從前宋君占問封立之事，請巫蒼判占；占者說吉。判辭說開始雖有憂吝，後來終究能完成；末尾殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0035",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 35,
+      "text": "19、豐曰：昔者上啻卜處□□而攴佔大＝明＝佔之曰不吉□臣體＝牝□雉＝◇304",
+      "punctuated_text": "19、豐曰：昔者上啻卜處□□而攴佔大＝明＝佔之曰不吉□臣體＝牝□雉＝◇304",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "19．《豐》卦說：從前上帝占問安置某事，請大、明判占；占者說不吉。後文涉及臣、牝雉等字，但句子殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "19．《豐》卦說：從前上帝占問安置某事，請大、明判占；占者說不吉。後文涉及臣、牝雉等字，但句子殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "豐",
+            "note": "周文王營建的都邑，與鎬並稱豐鎬。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0036",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 36,
+      "text": "20、大過曰：昔者□小臣卜逃唐而攴佔中＝虺＝佔之曰不吉過亓門言者□◇523",
+      "punctuated_text": "20、大過曰：昔者□小臣卜逃唐而攴佔中＝虺＝佔之曰不吉過亓門言者□◇523",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "20．《大過》卦說：從前某位小臣占問逃往唐地，請中、虺判占；占者說不吉，後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "20．《大過》卦說：從前某位小臣占問逃往唐地，請中、虺判占；占者說不吉，後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0037",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 37,
+      "text": "21、臨曰：◇",
+      "punctuated_text": "21、臨曰：◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "21．《臨》卦說：正文只剩殘斷符號，無法翻譯完整句意。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "21．《臨》卦說：正文只剩殘斷符號，無法翻譯完整句意。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0038",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 38,
+      "text": "22、灌曰：昔【者】夏後啓卜（知北遊按：此字從酉昜聲，傳本作享。",
+      "punctuated_text": "22、灌曰：昔【者】夏後啓卜（知北遊按：此字從酉昜聲，傳本作享。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "22．《灌》卦說：從前夏后啟占卜；此字從酉、昜聲，傳本作「享」。原簡下文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "22．《灌》卦說：從前夏后啟占卜；此字從酉、昜聲，傳本作「享」。原簡下文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "夏",
+            "note": "中國傳統王朝譜系中的早期王朝，與禹、啟、桀及商湯伐桀的故事相連。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0039",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 39,
+      "text": "下同）◇",
+      "punctuated_text": "下同）◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "以下同一校注省略；此處仍有殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "以下同一校注省略；此處仍有殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0040",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 40,
+      "text": "23、【卒】曰昔者□卜出雲而攴佔◇",
+      "punctuated_text": "23、【卒】曰昔者□卜出雲而攴佔◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "23．《卒》卦說：從前某人占問雲氣出現之事，後面的占辭殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "23．《卒》卦說：從前某人占問雲氣出現之事，後面的占辭殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0041",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 41,
+      "text": "24、復曰：昔者陼王卜復白雉□◇",
+      "punctuated_text": "24、復曰：昔者陼王卜復白雉□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "24．《復》卦說：從前陼王占問白雉回返之事，後文缺字並殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "24．《復》卦說：從前陼王占問白雉回返之事，後文缺字並殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0042",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 42,
+      "text": "25、毋亡曰：出入湯＝室安處而墅（知北遊按：原字上予下土）安藏毋亡◇471",
+      "punctuated_text": "25、毋亡曰：出入湯＝室安處而墅（知北遊按：原字上予下土）安藏毋亡◇471",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "25．《毋亡》卦說：出入湯室都能安穩居處，在墅地安藏，就不會亡失；「墅」字字形另有校注，末尾殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "25．《毋亡》卦說：出入湯室都能安穩居處，在墅地安藏，就不會亡失；「墅」字字形另有校注，末尾殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "湯",
+            "note": "商代建立者，傳統敘事中以伐桀完成商革夏命。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0043",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 43,
+      "text": "26、（知北逰按：左目右瞿，簡頭有睽卦卦畫）曰：昔者殷王貞卜亓【邦】尚毋有咎◇",
+      "punctuated_text": "26、（知北逰按：左目右瞿，簡頭有睽卦卦畫）曰：昔者殷王貞卜亓【邦】尚毋有咎◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "26．整理者認為此字左「目」右「瞿」，簡頭有睽卦卦畫。《睽》卦說：從前殷王占問國家，希望沒有災咎；末尾殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "26．整理者認為此字左「目」右「瞿」，簡頭有睽卦卦畫。《睽》卦說：從前殷王占問國家，希望沒有災咎；末尾殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "殷",
+            "note": "商王朝的別稱，也可指殷都或殷遺民。"
+          },
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0044",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 44,
+      "text": "27、散曰：昔者◇◇□卜□散實而攴佔大◇",
+      "punctuated_text": "27、散曰：昔者◇◇□卜□散實而攴佔大◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "27．《散》卦說：從前有殘缺人物占問某事，與「散實」和「大」占有關；正文多處缺字。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "27．《散》卦說：從前有殘缺人物占問某事，與「散實」和「大」占有關；正文多處缺字。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0045",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 45,
+      "text": "28、節曰：昔者武王卜伐殷而攴佔老＝考＝佔曰吉◇194",
+      "punctuated_text": "28、節曰：昔者武王卜伐殷而攴佔老＝考＝佔曰吉◇194",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "28．《節》卦說：從前武王占問討伐殷，請老、考判占；占者說吉，末尾殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "28．《節》卦說：從前武王占問討伐殷，請老、考判占；占者說吉，末尾殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "武王",
+            "note": "姬發，周朝建立者，傳統敘事中在牧野擊敗紂。"
+          },
+          {
+            "term": "殷",
+            "note": "商王朝的別稱，也可指殷都或殷遺民。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0046",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 46,
+      "text": "29、渙曰昔者高◇328",
+      "punctuated_text": "29、渙曰昔者高◇328",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "29．《渙》卦說：從前有一位以「高」開頭的人或事，但後文只剩殘片。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "29．《渙》卦說：從前有一位以「高」開頭的人或事，但後文只剩殘片。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0047",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 47,
+      "text": "30、【蹇】□◇",
+      "punctuated_text": "30、【蹇】□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "30．可辨識出《蹇》卦名，另有缺字與殘斷，無法翻譯成完整句子。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "30．可辨識出《蹇》卦名，另有缺字與殘斷，無法翻譯成完整句子。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0048",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 48,
+      "text": "31、損曰◇",
+      "punctuated_text": "31、損曰◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "31．《損》卦的正文只剩卦名和殘斷標記。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "31．《損》卦的正文只剩卦名和殘斷標記。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0049",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 49,
+      "text": "32、【鹹】曰◇",
+      "punctuated_text": "32、【鹹】曰◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "32．可辨識出《鹹》卦名，正文只剩殘斷標記。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "32．可辨識出《鹹》卦名，正文只剩殘斷標記。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0050",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 50,
+      "text": "33、恆我曰：昔者女過卜作爲緘而◇476",
+      "punctuated_text": "33、恆我曰：昔者女過卜作爲緘而◇476",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "33．《恆我》卦說：從前女過占問製作封緘之事；後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "33．《恆我》卦說：從前女過占問製作封緘之事；後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0051",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 51,
+      "text": "34、（知北逰按：此字上罒下左炎右匕，當即罽字，即夬卦）曰：昔者赤舄止木之遽初鳴曰鵲後鳴曰舄有夫取妻存歸亓家◇212",
+      "punctuated_text": "34、（知北逰按：此字上罒下左炎右匕，當即罽字，即夬卦）曰：昔者赤舄止木之遽初鳴曰鵲後鳴曰舄有夫取妻存歸亓家◇212",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "34．整理者認為此字應是「罽」，即夬卦。《夬》卦說：從前赤舄停在樹上，先鳴叫如鵲，後鳴叫如舄；有男子娶妻，妻子留在家中。末尾殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "34．整理者認為此字應是「罽」，即夬卦。《夬》卦說：從前赤舄停在樹上，先鳴叫如鵲，後鳴叫如舄；有男子娶妻，妻子留在家中。末尾殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0052",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 52,
+      "text": "35、□（知北逰按：此簡頭有姤卦卦畫，此當即姤卦）曰：昔者◇5",
+      "punctuated_text": "35、□（知北逰按：此簡頭有姤卦卦畫，此當即姤卦）曰：昔者◇5",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "35．整理者依簡頭卦畫判定為《姤》卦；正文只剩「從前」和殘斷符號。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "35．整理者依簡頭卦畫判定為《姤》卦；正文只剩「從前」和殘斷符號。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0053",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 53,
+      "text": "36、兌曰：兌＝黃衣以生金日月並出獸□◇",
+      "punctuated_text": "36、兌曰：兌＝黃衣以生金日月並出獸□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "36．《兌》卦說：兌卦又作「黃衣」；由此生出金，日月同時出現，並有獸類，後文缺失。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "36．《兌》卦說：兌卦又作「黃衣」；由此生出金，日月同時出現，並有獸類，後文缺失。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0054",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 54,
+      "text": "37、麗曰：昔者上◇",
+      "punctuated_text": "37、麗曰：昔者上◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "37．《麗》卦說：從前有「上……」的記載，但後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "37．《麗》卦說：從前有「上……」的記載，但後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0055",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 55,
+      "text": "38、勞曰：昔者蚩尤卜鑄五兵而攴佔赤□◇536",
+      "punctuated_text": "38、勞曰：昔者蚩尤卜鑄五兵而攴佔赤□◇536",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "38．《勞》卦說：從前蚩尤占問鑄造五種兵器，請赤……判占；後文缺字並殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "38．《勞》卦說：從前蚩尤占問鑄造五種兵器，請赤……判占；後文缺字並殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0056",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 56,
+      "text": "39、陵（知北逰按：此簡頭有謙卦卦畫，此即謙卦）曰：昔者赤烏卜裕水通而見神爲木出焉是啻◇503",
+      "punctuated_text": "39、陵（知北逰按：此簡頭有謙卦卦畫，此即謙卦）曰：昔者赤烏卜裕水通而見神爲木出焉是啻◇503",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "39．整理者指出此簡頭有謙卦卦畫，故判定為《謙》卦。《謙》卦說：從前赤烏占問水道通暢，看見神靈化為木而出現；後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "39．整理者指出此簡頭有謙卦卦畫，故判定為《謙》卦。《謙》卦說：從前赤烏占問水道通暢，看見神靈化為木而出現；後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0057",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 57,
+      "text": "40、介（知北逰按：此簡頭有豫卦卦畫）曰北＝黃鳥雜彼秀虛有樷者□□有□□人民◇207",
+      "punctuated_text": "40、介（知北逰按：此簡頭有豫卦卦畫）曰北＝黃鳥雜彼秀虛有樷者□□有□□人民◇207",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "40．整理者指出簡頭有豫卦卦畫。《豫》卦說：北方有黃鳥，與那裡的草木交雜；有成叢之物，還有缺失的人民相關文字。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "40．整理者指出簡頭有豫卦卦畫。《豫》卦說：北方有黃鳥，與那裡的草木交雜；有成叢之物，還有缺失的人民相關文字。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0058",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 58,
+      "text": "41、歸妹曰：昔者恆我竊毋死之□◇307◇□□奔月而攴佔□□□◇201",
+      "punctuated_text": "41、歸妹曰：昔者恆我竊毋死之□◇307◇□□奔月而攴佔□□□◇201",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "41．《歸妹》卦說：從前恆我竊取了不死之物的某部分；後文似乎寫到奔月與占問，但多處缺字、殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "41．《歸妹》卦說：從前恆我竊取了不死之物的某部分；後文似乎寫到奔月與占問，但多處缺字、殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0059",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 59,
+      "text": "42、漸曰：昔者殷王貞卜亓邦尚毋有咎而攴佔巫咸＝佔之曰不吉不漸於◇335",
+      "punctuated_text": "42、漸曰：昔者殷王貞卜亓邦尚毋有咎而攴佔巫咸＝佔之曰不吉不漸於◇335",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "42．《漸》卦說：從前殷王占問國家，希望沒有災咎，請巫咸判占；占者說不吉，不能逐步進展到……後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "42．《漸》卦說：從前殷王占問國家，希望沒有災咎，請巫咸判占；占者說不吉，不能逐步進展到……後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "殷",
+            "note": "商王朝的別稱，也可指殷都或殷遺民。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0060",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 60,
+      "text": "43、（知北逰按：此字上艹下晉，《集韻》以爲“茜”之或體，即晉卦。",
+      "punctuated_text": "43、（知北逰按：此字上艹下晉，《集韻》以爲“茜”之或體，即晉卦。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "43．整理者指出此字上艹下近「晉」，《集韻》認為是「茜」的異體，這裡判定為晉卦；下文另有殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "43．整理者指出此字上艹下近「晉」，《集韻》認為是「茜」的異體，這裡判定為晉卦；下文另有殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0061",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 61,
+      "text": "下同）曰：昔者◇◇卜帝之虛作爲□◇",
+      "punctuated_text": "下同）曰：昔者◇◇卜帝之虛作爲□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "以下同一校注省略。《晉》卦說：從前占問帝的居處，並製作某物；正文缺字並殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "以下同一校注省略。《晉》卦說：從前占問帝的居處，並製作某物；正文缺字並殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0062",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 62,
+      "text": "44、明夷曰：昔者夏後啓卜成乘飛龍以登於天而攴佔□□◇",
+      "punctuated_text": "44、明夷曰：昔者夏後啓卜成乘飛龍以登於天而攴佔□□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "44．《明夷》卦說：從前夏后啟占問乘飛龍登天是否能成；後面的占辭缺失。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "44．《明夷》卦說：從前夏后啟占問乘飛龍登天是否能成；後面的占辭缺失。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "夏",
+            "note": "中國傳統王朝譜系中的早期王朝，與禹、啟、桀及商湯伐桀的故事相連。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0063",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 63,
+      "text": "45、（知北逰按：此簡頭有既濟卦畫）曰：昔者殷王貞卜亓邦尚毋有咎而攴佔巫咸＝佔之曰不吉亓席投之壑（知北逰按：壑原字左亦右谷，即從谷亦聲，當是壑之或體）在北爲牝□◇213",
+      "punctuated_text": "45、（知北逰按：此簡頭有既濟卦畫）曰：昔者殷王貞卜亓邦尚毋有咎而攴佔巫咸＝佔之曰不吉亓席投之壑（知北逰按：壑原字左亦右谷，即從谷亦聲，當是壑之或體）在北爲牝□◇213",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "45．整理者指出簡頭有既濟卦卦畫。《既濟》卦說：從前殷王占問國家，希望沒有災咎，請巫咸判占；占者說不吉，將他的席位投入深谷。整理者又說「壑」的字形是從谷、亦聲；後文有「北」「牝」等殘缺文字。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "45．整理者指出簡頭有既濟卦卦畫。《既濟》卦說：從前殷王占問國家，希望沒有災咎，請巫咸判占；占者說不吉，將他的席位投入深谷。整理者又說「壑」的字形是從谷、亦聲；後文有「北」「牝」等殘缺文字。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "殷",
+            "note": "商王朝的別稱，也可指殷都或殷遺民。"
+          },
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0064",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 64,
+      "text": "46、□□（知北逰按：此簡頭有未濟卦畫）□□□攴卜□□□◇",
+      "punctuated_text": "46、□□（知北逰按：此簡頭有未濟卦畫）□□□攴卜□□□◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "46．整理者指出簡頭有未濟卦卦畫；正文大多不能辨識，只能確認有占卜內容和殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "46．整理者指出簡頭有未濟卦卦畫；正文大多不能辨識，只能確認有占卜內容和殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0065",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 65,
+      "text": "47、（知北逰按：即遯卦）曰：以入爲羽不高不下即利初事有利□◇463",
+      "punctuated_text": "47、（知北逰按：即遯卦）曰：以入爲羽不高不下即利初事有利□◇463",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "47．整理者判定為遯卦。卦辭說：把「入」當作羽翼，不高也不低，對事情的開始有利；後文缺字並殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "47．整理者判定為遯卦。卦辭說：把「入」當作羽翼，不高也不低，對事情的開始有利；後文缺字並殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0066",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 66,
+      "text": "48、亦（知北逰按：此簡頭有蠱卦卦畫）曰：昔者北□◇343",
+      "punctuated_text": "48、亦（知北逰按：此簡頭有蠱卦卦畫）曰：昔者北□◇343",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "48．整理者指出簡頭有蠱卦卦畫。《蠱》卦說：從前北方有……後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "48．整理者指出簡頭有蠱卦卦畫。《蠱》卦說：從前北方有……後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0067",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 67,
+      "text": "49、□曰昔者北敢夫＝逆女過而攴佔□◇404",
+      "punctuated_text": "49、□曰昔者北敢夫＝逆女過而攴佔□◇404",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "49．卦名不能辨識；簡文說從前北方有「敢夫」與「逆女過」之事，並進行占問，後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "49．卦名不能辨識；簡文說從前北方有「敢夫」與「逆女過」之事，並進行占問，後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0068",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 68,
+      "text": "50、筮曰□之□筮蓋之□□◇537",
+      "punctuated_text": "50、筮曰□之□筮蓋之□□◇537",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "50．《筮》卦說：某事由筮法覆蓋或判定，但關鍵字均已缺失。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "50．《筮》卦說：某事由筮法覆蓋或判定，但關鍵字均已缺失。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0069",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 69,
+      "text": "51、□（知北逰按：此簡頭有賁卦卦畫）曰昔【者】◇",
+      "punctuated_text": "51、□（知北逰按：此簡頭有賁卦卦畫）曰昔【者】◇",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "51．整理者指出簡頭有賁卦卦畫；卦辭只剩「從前」和殘斷。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "51．整理者指出簡頭有賁卦卦畫；卦辭只剩「從前」和殘斷。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0070",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 70,
+      "text": "52、中絕（知北逰按：絕字當是從糹包聲，即中孚）曰：啻□卜◇317",
+      "punctuated_text": "52、中絕（知北逰按：絕字當是從糹包聲，即中孚）曰：啻□卜◇317",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "52．整理者認為「中絕」的「絕」字應從糸、包聲，卦名即中孚。《中孚》卦說：上帝……占卜；後文殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "52．整理者認為「中絕」的「絕」字應從糸、包聲，卦名即中孚。《中孚》卦說：上帝……占卜；後文殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0071",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 71,
+      "text": "53、大【壯】曰：昔者◇408隆卜將雲雨而攴佔囷京＝佔之曰吉大山之雲降◇196",
+      "punctuated_text": "53、大【壯】曰：昔者◇408隆卜將雲雨而攴佔囷京＝佔之曰吉大山之雲降◇196",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "53．《大壯》卦說：從前某人占問將有雲雨，請囷、京判占；占者說吉，大山上的雲降下；末尾殘缺。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "53．《大壯》卦說：從前某人占問將有雲雨，請囷、京判占；占者說吉，大山上的雲降下；末尾殘缺。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0072",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 72,
+      "text": "知北逰按：以上根據王明欽《王家臺秦墓竹簡概述》（2000年北京大學新出簡帛國際學術研討會論文，手寫本）抄錄，開篇一段介紹即王先生之文；",
+      "punctuated_text": "知北逰按：以上根據王明欽《王家臺秦墓竹簡概述》（2000年北京大學新出簡帛國際學術研討會論文，手寫本）抄錄，開篇一段介紹即王先生之文；",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "整理者說：以上內容抄錄自王明欽《王家臺秦墓竹簡概述》；開頭的介紹就是王先生原文。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "整理者說：以上內容抄錄自王明欽《王家臺秦墓竹簡概述》；開頭的介紹就是王先生原文。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0073",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 73,
+      "text": "原簡頭具有卦畫，茲從略，唯卦名用字與《周易》不同者用按語說明；",
+      "punctuated_text": "原簡頭具有卦畫，茲從略，唯卦名用字與《周易》不同者用按語說明；",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "原竹簡開頭有卦畫，這裡省略；只有卦名用字和《周易》不同時，才用按語說明。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "原竹簡開頭有卦畫，這裡省略；只有卦名用字和《周易》不同時，才用按語說明。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [
+          {
+            "term": "周",
+            "note": "周族、周王朝或周人政治秩序的泛稱。"
+          },
+          {
+            "term": "卦畫",
+            "note": "王家台秦簡易占材料中的卦象記號，用來表示占筮結構。"
+          }
+        ],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "contextualized"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0074",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 74,
+      "text": "打不出來的古體字亦用按語描述。",
+      "punctuated_text": "打不出來的古體字亦用按語描述。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "無法輸入的古體字，也用按語描述字形。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "無法輸入的古體字，也用按語描述字形。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    },
+    {
+      "id": "wangjiatai_guicang_excerpt__0075",
+      "section": "王家臺秦簡《歸藏》公開釋文節錄",
+      "order": 75,
+      "text": "如有疑問請覈對王先生原稿。",
+      "punctuated_text": "如有疑問請覈對王先生原稿。",
+      "punctuation_status": "source_or_existing",
+      "context": {
+        "plain_meaning": "如有疑問，請核對王先生的原稿。",
+        "contextual_background": "",
+        "derived_implications": "",
+        "summary": "如有疑問，請核對王先生的原稿。",
+        "narrative_role": "王家臺秦簡《歸藏》公開釋文節錄",
+        "background_terms": [],
+        "historical_connections": [],
+        "caution": null
+      },
+      "annotation_status": "text_only"
+    }
+  ]
+}

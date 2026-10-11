@@ -15,8 +15,7 @@
 
 ## Update
 
-> 後續內容擴充方向：- 帛書版易經 - 歸藏易經 版本的加入
-
+- 2026.10.11: 加入《史記·殷本紀、周本紀》、《尚書·周書》、《竹書紀年傳本/古本》、《王家臺秦簡・歸藏易》，並將馬王堆帛書《周易》逐爻加入六十四卦資料。
 - 2026.08.12: 我暫停了後端的服務，前端服務仍正常，如果想要看完整功能可以聯繫我把後端開起來或者按照步驟自己開後端。
 - 2026.08.02: Backend 2.0
 - 2026.07.26: Vote function + Backend 1.0
@@ -60,6 +59,13 @@
 │  ├─ wen.json / wen.html
 │  ├─ xu.json / xu.html
 │  └─ za.json
+├─ classics/                       古籍逐句與歷史註解資料
+│  ├─ index.json
+│  ├─ shiji_yin_zhou.json
+│  ├─ shangshu_zhoushu.json
+│  ├─ zhushu_jinian_siku.json
+│  ├─ zhushu_jinian_guben.json
+│  └─ wangjiatai_guicang_excerpt.json
 ├─ md/
 │  ├─ 易經.md
 │  ├─ 易經_彖_象_文言_序卦.md
@@ -90,6 +96,7 @@
 《易經》本文與卦象索引資料。
 
 - `iching.json`：六十四卦主資料。
+- `ToDO.txt`：馬王堆帛書《周易》整理來源；內容先轉為繁體，再依傳本卦序與爻位對應到 `iching.json`。
 - `array-name_dict.json`：卦爻陰陽陣列到卦名的對照。
 - `array-symbol_dict.json`：卦爻陰陽陣列到卦象符號的對照。
 - `order_dict.json`：卦名到卦序的對照。
@@ -113,6 +120,24 @@
 ### `md/`
 
 可直接閱讀的 Markdown 版本。
+
+### `classics/`
+
+四部古籍的逐句 JSON 資料，供前端逐句閱讀、搜尋與定位註解使用。每筆資料都有穩定的 `id`，並包含：
+
+- `section`：篇章或卷次
+- `text`：保留來源的未加標點正文
+- `punctuated_text`：供閱讀與前端顯示的整理斷句；不覆寫 `text`
+- `punctuation_status`：`source_or_existing`、`source_aligned` 或 `editorial_inferred`
+- `context.summary`：本句在篇章中的脈絡化說明
+- `context.narrative_role`：篇章敘事功能
+- `context.background_terms`：詞語在本句中的文獻背景，不改寫正文
+- `context.historical_connections`：與本句直接相關的歷史事件、解說與命中詞語
+- `context.caution`：神話、祥瑞、版本或學術爭議提示
+
+`classics/index.json` 是索引；建置時會複製到 `dist/data/classics/`。資料使用 `yz-classics-sentence-v1` schema，正文與背景分離，沒有可靠背景時保留空陣列或 `null`，不以推測改寫正文。
+
+《竹書紀年》另分為四庫本 `zhushu_jinian_siku.json` 與古本輯校／輯佚本 `zhushu_jinian_guben.json`。四庫本的整理標點屬編輯層，不能視為汲冢竹簡原貌；古本輯校本的條文則保留輯校來源與 `source_witnesses`。
 
 ### `heluolishu/`
 
@@ -143,6 +168,7 @@
         "type": 1,
         "name": "初九",
         "scripture": "潛龍，勿用。",
+        "silk_scripture": "浸龍，勿用。",
         "image": "",
         "poetry": ""
       }
@@ -168,6 +194,7 @@
 | `lines[].type` | 爻性，`1` 為陽爻，`0` 為陰爻 |
 | `lines[].name` | 爻名 |
 | `lines[].scripture` | 爻辭 |
+| `lines[].silk_scripture` | 馬王堆帛書《周易》對應爻辭；◎、□及字形說明保留原貌 |
 | `lines[].image` | 圖像位址 |
 | `lines[].poetry` | 詩詞內容 |
 | `image` | 預留圖片欄位 |

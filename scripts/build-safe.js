@@ -35,6 +35,7 @@ function buildDist() {
     path.join(root, 'iching', 'iching.json'),
     path.join(root, 'image'),
     path.join(root, 'md'),
+    path.join(root, 'classics', 'index.json'),
   ];
 
   for (const source of required) {
@@ -58,6 +59,7 @@ function buildDist() {
 
   fs.cpSync(path.join(root, 'image'), path.join(dist, 'image'), { recursive: true });
   fs.cpSync(path.join(root, 'md'), path.join(dist, 'texts'), { recursive: true });
+  fs.cpSync(path.join(root, 'classics'), path.join(dist, 'data', 'classics'), { recursive: true });
 
   const imageCount = fs.readdirSync(path.join(dist, 'image'), { withFileTypes: true })
     .filter((entry) => entry.isFile()).length;
