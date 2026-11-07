@@ -183,12 +183,19 @@ function bindUI(){
   $('#notes-button').onclick=openNotes;
   $('#close-panel').onclick=closeNotesPanel;
   search.oninput=e=>{state.query=e.target.value.trim().toLowerCase();renderHexagramList();};
-  addEventListener('hashchange',route); addEventListener('resize',()=>requestAnimationFrame(()=>{applyHighlights();positionWangbiMarkers();}));
+  addEventListener('hashchange',route); addEventListener('resize',()=>requestAnimationFrame(applyHighlights));
   addEventListener('scroll',hideBubble,{passive:true});
   document.addEventListener('selectionchange',captureSelection);
   document.addEventListener('pointerdown',event=>{
     if(!event.target.closest('.annotation-bubble,#bubble-tooltip'))hideBubble();
   });
+  reader.addEventListener('click',event=>{
+    const trigger=event.target.closest('.wangbi-note-trigger');
+    if(trigger)openWangbiNote(trigger);
+  });
+  $('#close-wangbi').onclick=closeWangbiNote;
+  $('#wangbi-modal').addEventListener('click',event=>{if(event.target.id==='wangbi-modal')closeWangbiNote();});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('#wangbi-modal').hidden)closeWangbiNote();});
   $('#open-annotation').addEventListener('pointerdown',event=>{
     event.preventDefault();
     openAnnotationModal();
@@ -371,7 +378,7 @@ function initNavigation(){
 }
 
 function route(){
-  state.pending=null;$('#highlight-action').hidden=true;hideBubble();document.querySelectorAll('.annotation-bubble,.wangbi-marker').forEach(x=>x.remove());
+  state.pending=null;$('#highlight-action').hidden=true;hideBubble();closeWangbiNote();document.querySelectorAll('.annotation-bubble').forEach(x=>x.remove());
   const [kind,value]=location.hash.slice(1).split('/');
   if(kind==='text'&&value==='classics') return renderClassics();
   if(kind==='text'&&TEXTS.some(x=>x.id===value)) return renderText(value);
@@ -388,8 +395,8 @@ function renderHexagramList(){
 function renderHexagram(){
   const x=state.hexagrams.find(item=>item.id===state.selectedId);if(!x)return;setTitle(`${x.name}卦`);
   const silk=x.silk_scripture?`<p class="scripture silk-scripture">${esc(x.silk_scripture)}</p>`:'';
-  reader.innerHTML=`<article class="annotatable" data-doc="gua-${x.id}"><header class="hero"><div class="hero-symbol">${esc(x.symbol)}</div><div><h1><span class="sequence">第 ${x.id} 卦</span>${esc(x.name)}</h1><p class="combination">下${esc(x.combination[0])} · 上${esc(x.combination[1])}</p><p class="scripture" data-wangbi-gua>${esc(x.scripture)}</p>${silk}</div></header><h2 class="section-title">卦 詩</h2><p class="poetry main-poetry">${esc(x.poetry)}</p><h2 class="section-title">爻 辭 與 詩 訣</h2><div class="lines">${x.lines.map(renderLine).join('')}</div></article>`;
-  renderWangbiMarkers(x);
+  const guaTrigger=x.wangbi_note?`<button class="wangbi-note-trigger" type="button" data-wangbi="gua" aria-label="查看${esc(x.name)}卦辭註解"></button>`:'';
+  reader.innerHTML=`<article class="annotatable" data-doc="gua-${x.id}"><header class="hero"><div class="hero-symbol">${esc(x.symbol)}</div><div><h1><span class="sequence">第 ${x.id} 卦</span>${esc(x.name)}</h1><p class="combination">下${esc(x.combination[0])} · 上${esc(x.combination[1])}</p><div class="scripture-note-row"><p class="scripture">${esc(x.scripture)}</p>${guaTrigger}</div>${silk}</div></header><h2 class="section-title">卦 詩</h2><p class="poetry main-poetry">${esc(x.poetry)}</p><h2 class="section-title">爻 辭 與 詩 訣</h2><div class="lines">${x.lines.map(renderLine).join('')}</div></article>`;
   applyHighlights();
 }
 
@@ -397,41 +404,24 @@ function renderLine(line){
   const visual=line.image?`<img src="${line.image.replace(/^\.\.\/image\//,'/image/')}" alt="${esc(line.name)}圖" loading="lazy">`:'<span class="image-missing">圖片尚未提供</span>';
   const poem=line.poetry?`<p class="poetry line-poetry">${esc(line.poetry)}</p>`:'<p class="no-poetry">此爻無附加詩訣</p>';
   const silk=line.silk_scripture?`<p class="line-scripture silk-scripture">${esc(line.silk_scripture)}</p>`:'';
-  return `<section class="line-card"><div class="line-top"><div class="line-visual">${visual}</div><div><h3 class="line-name">${esc(line.name)}<span class="line-type">${line.type?'陽爻':'陰爻'}</span></h3><p class="line-scripture" data-wangbi-line="${line.id}">${esc(line.scripture)}</p>${silk}</div></div>${poem}</section>`;
+  const trigger=line.wangbi_note?`<button class="wangbi-note-trigger" type="button" data-wangbi="${line.id}" aria-label="查看${esc(line.name)}爻註解"></button>`:'';
+  return `<section class="line-card"><div class="line-top"><div class="line-visual">${visual}</div><div class="line-copy"><h3 class="line-name">${esc(line.name)}<span class="line-type">${line.type?'陽爻':'陰爻'}</span></h3><div class="scripture-note-row"><p class="line-scripture">${esc(line.scripture)}</p>${trigger}</div>${silk}${poem}</div></div></section>`;
 }
 
-function positionWangbiMarkers(){
-  document.querySelectorAll('.wangbi-marker').forEach(marker=>{
-    const anchor=reader.querySelector(marker.dataset.anchor);
-    if(!anchor){marker.remove();return;}
-    const rect=anchor.getBoundingClientRect();
-    marker.style.left=`${Math.min(innerWidth-37,rect.right+scrollX+5)}px`;
-    marker.style.top=`${rect.top+scrollY+2}px`;
-  });
+function openWangbiNote(trigger){
+  const hexagram=state.hexagrams.find(item=>item.id===state.selectedId);
+  const line=trigger.dataset.wangbi==='gua'?null:hexagram?.lines.find(item=>item.id===Number(trigger.dataset.wangbi));
+  const note=line?line.wangbi_note:hexagram?.wangbi_note;
+  if(!note)return;
+  $('#wangbi-title').textContent=line?`${hexagram.name}卦 · ${line.name}`:`${hexagram.name}卦 · 卦辭`;
+  $('#wangbi-note-body').innerHTML=note.split(/\n\s*\n/).filter(Boolean).map(paragraph=>`<p>${esc(paragraph)}</p>`).join('');
+  $('#wangbi-modal').hidden=false;
+  $('#wangbi-modal .modal-card').focus();
 }
 
-function renderWangbiMarkers(hexagram){
-  document.querySelectorAll('.wangbi-marker').forEach(marker=>marker.remove());
-  const entries=[{anchor:'[data-wangbi-gua]',note:hexagram.wangbi_note,label:`查看${hexagram.name}卦註解`},
-    ...hexagram.lines.map(line=>({anchor:`[data-wangbi-line="${line.id}"]`,note:line.wangbi_note,label:`查看${hexagram.name}卦${line.name}註解`}))];
-  entries.filter(entry=>entry.note).forEach(({anchor,note,label})=>{
-    const marker=document.createElement('button');
-    marker.type='button';marker.className='wangbi-marker';marker.textContent='註';
-    marker.dataset.anchor=anchor;marker.setAttribute('aria-label',label);
-    marker.setAttribute('aria-expanded','false');
-    marker.onclick=()=>{
-      const tip=$('#bubble-tooltip');
-      const isOpen=!tip.hidden&&tip.dataset.wangbiAnchor===anchor;
-      clearTimeout(showBubble.timer);
-      document.querySelectorAll('.wangbi-marker').forEach(item=>item.setAttribute('aria-expanded','false'));
-      if(isOpen){hideBubble();return;}
-      tip.textContent=note;tip.classList.add('wangbi-tooltip');tip.dataset.wangbiAnchor=anchor;
-      tip.hidden=false;marker.setAttribute('aria-expanded','true');
-    };
-    document.body.appendChild(marker);
-  });
-  positionWangbiMarkers();
-  document.fonts?.ready.then(()=>{if(state.selectedId===hexagram.id)positionWangbiMarkers();});
+function closeWangbiNote(){
+  const modal=$('#wangbi-modal');
+  if(modal)modal.hidden=true;
 }
 
 async function renderText(id){
@@ -1895,7 +1885,7 @@ function annotationPreviewText(value,maxLength=50){
   return characters.length>maxLength?characters.slice(0,maxLength).join('')+'...':characters.join('');
 }
 function showBubble(note){const tip=$('#bubble-tooltip');tip.innerHTML=`<strong>${esc(notePageName(note.doc))}</strong>${esc(annotationPreviewText(note.comment||'尚未填寫註解'))}`;tip.hidden=false;clearTimeout(showBubble.timer);showBubble.timer=setTimeout(hideBubble,5000);navigator.vibrate?.(25);}
-function hideBubble(){const tip=$('#bubble-tooltip');tip.hidden=true;tip.classList.remove('wangbi-tooltip');delete tip.dataset.wangbiAnchor;document.querySelectorAll('.wangbi-marker').forEach(marker=>marker.setAttribute('aria-expanded','false'));}
+function hideBubble(){$('#bubble-tooltip').hidden=true;}
 function rangeFromOffsets(root,start,end){
   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node,pos=0,sNode,eNode,sOffset,eOffset;
   while((node=walker.nextNode())){const next=pos+node.data.length;if(sNode==null&&start>=pos&&start<=next){sNode=node;sOffset=start-pos;}if(end>=pos&&end<=next){eNode=node;eOffset=end-pos;break;}pos=next;}

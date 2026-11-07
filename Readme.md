@@ -209,7 +209,7 @@
 
 前端閱讀頁會將 `scripture` 與 `silk_scripture`、以及每一爻的兩個 `scripture` 欄位依序上下顯示；兩個版本不另加「傳本／帛書」標籤。搜尋也會同時查找本卦與爻辭的帛書內容。
 
-王弼注取自 `KR1a0006-master.zip` 的前六卷，可使用 `node scripts/import-wangbi-notes.js --write` 重新匯入。來源無標點，保留異體字；來源「臨」卦缺頁造成前三爻沒有注解。閱讀頁有注解的位置會顯示「註」標記，點開閱讀內容；標記獨立於讀者自行新增的註記。
+王弼注以 `KR1a0006-master.zip` 的前六卷為底本，可使用 `node scripts/import-wangbi-notes.js --write` 重新匯入。接著使用 `node scripts/punctuate-wangbi-notes.js --write` 對照[易學網校對文本](https://www.eee-learning.com/book/wangbe) 補入標點、校正底本缺頁與辨識錯字。閱讀頁在有注解的卦辭、爻辭旁顯示「註」標記，點開後分段閱讀；標記獨立於讀者自行新增的註記。
 
 ### `iching/*.json` 詞典資料
 

@@ -43,6 +43,7 @@ export async function createApp({ serveStatic = false } = {}) {
   app.use(express.urlencoded({ extended: true }));
 
   if (serveStatic) {
+    app.get('/data/iching.json', (_req, res) => res.sendFile(path.join(__dirname, '../iching/iching.json')));
     app.use(express.static(path.join(__dirname, '../public')));
     app.use(express.static(path.join(__dirname, '../dist')));
     app.use('/image', express.static(path.join(__dirname, '../image')));
