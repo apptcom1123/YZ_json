@@ -27,6 +27,7 @@ async function fetchHexagram(hexagram) {
   if (!response.ok) throw new Error(`${hexagram.name}: HTTP ${response.status}`);
   const parts = paragraphs(await response.text());
   let current = -1;
+  let inWenyan = false;
   const notes = Array.from({ length: hexagram.lines.length + 1 }, () => []);
   const found = [];
   for (const part of parts) {
@@ -38,9 +39,23 @@ async function fetchHexagram(hexagram) {
       if (index >= 0) { current = index; found.push(label); }
     } else if (hexagram.id === 1 && /^(?:《彖》|彖曰)/u.test(part)) {
       current = -1;
+    } else if (hexagram.id === 1 && /^文言曰/u.test(part)) {
+      inWenyan = true;
+      current = -1;
+    } else if (hexagram.id === 1 && inWenyan) {
+      const wenyanLine = part.match(/^(初九|九二|九三|九四|九五|上九)曰/u);
+      if (wenyanLine) current = hexagram.lines.findIndex(line => line.name === wenyanLine[1]);
+      else if (/^潛龍勿用，下也/u.test(part)) { inWenyan = false; current = -1; }
     }
     const annotation = part.match(/^(?:[【〖]注[】〗]|注云[：:]|注[：:])\s*(.+)/u);
-    if (annotation) notes[current + 1].push(annotation[1]);
+    if (annotation) {
+      const general = hexagram.id === 1 && inWenyan && current === hexagram.lines.findIndex(line => line.name === '上九')
+        ? annotation[1].indexOf('《乾．文言》') : -1;
+      if (general >= 0) {
+        notes[current + 1].push(annotation[1].slice(0, general).trim());
+        notes[0].push(annotation[1].slice(general).trim());
+      } else notes[current + 1].push(annotation[1]);
+    }
   }
   const missingHeadings = hexagram.lines.filter(line => !found.includes(line.name)).map(line => line.name);
   return { id: hexagram.id, url, notes, missingHeadings };
